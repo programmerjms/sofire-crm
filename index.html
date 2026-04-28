@@ -553,7 +553,9 @@ textarea{resize:vertical;min-height:70px}
       <div style="display:flex;gap:8px;align-items:center">
         <select id="tax-year-select" onchange="renderExpenses()" style="width:auto;padding:5px 10px;font-size:12px">
           <option value="2025">FY 2024/2025</option>
-          <option value="2026" selected>FY 2025/2026</option>
+          <option value="2026">FY 2025/2026</option>
+          <option value="2027" selected>FY 2026/2027</option>
+          <option value="2028">FY 2027/2028</option>
         </select>
       </div>
     </div>
@@ -881,12 +883,12 @@ let state = {
     fyStart:3,
     bkEmail:'',
     logoData:null,
-    defaultRefundPolicy:'Sofire-IT Support (Juan Du Plessis Freelance) operates under a strict no-refund policy. Once services are completed and delivered to the client\'s satisfaction, no refunds will be issued under any circumstances.',
+    defaultRefundPolicy:"Sofire-IT Support (Juan Du Plessis Freelance) operates under a strict no-refund policy. Once services are completed and delivered to the client's satisfaction, no refunds will be issued under any circumstances.",
     defaultClientObligations:'It is the responsibility of the client to provide clear instructions, feedback, and any necessary materials required for the completion of the services. Failure to do so may result in delays or additional charges, but it does not warrant a refund.'
   }
 };
 
-let uploadedFile = null, expReceiptFile = null;
+let uploadedFile = null, expReceiptFileCurrent = null;
 let charts = {};
 
 // ============================================================
@@ -915,7 +917,24 @@ function nav(page){
   if(page==='invoices')renderInvoices();
   if(page==='payments')renderPayments();
   if(page==='analytics'){renderAnalytics();}
-  if(page==='expenses')renderExpenses();
+  if(page==='expenses'){
+    // Auto-select the FY that contains today
+    const now=new Date();
+    const fyStart=state.settings.fyStart||3;
+    // If current month >= fyStart, we're in fyYear = currentYear+1
+    const autoFY = now.getMonth()+1 >= fyStart ? now.getFullYear()+1 : now.getFullYear();
+    const sel=document.getElementById('tax-year-select');
+    if(sel){
+      // Add option if not present
+      if(![...sel.options].find(o=>parseInt(o.value)===autoFY)){
+        const opt=document.createElement('option');
+        opt.value=autoFY;opt.textContent=`FY ${autoFY-1}/${autoFY}`;
+        sel.appendChild(opt);
+      }
+      sel.value=autoFY;
+    }
+    renderExpenses();
+  }
   if(page==='customers')renderCustomers();
   if(page==='settings')loadSettings();
   if(page==='create'&&!state.editingId)initCreate();
@@ -1542,12 +1561,12 @@ const EXP_CATEGORIES=[
   {name:'Online Purchases for Business',icon:'🛒'},
   {name:'Other',icon:'📦'}
 ];
-let expReceiptFileCurrent=null;
 function handleExpenseReceipt(input){expReceiptFileCurrent=input.files[0];if(expReceiptFileCurrent){document.getElementById('exp-upload-preview').textContent='✓ '+expReceiptFileCurrent.name;}}
 function openExpenseModal(id){
   expReceiptFileCurrent=null;
   document.getElementById('exp-upload-preview').textContent='';
   document.getElementById('exp-upload-area').style.borderColor='';
+  document.getElementById('exp-receipt-file').value='';
   if(id){
     const e=state.expenses.find(x=>x.id===id);if(!e)return;
     state.editingExpId=id;
@@ -1591,7 +1610,7 @@ function saveExpense(){
 }
 function deleteExpense(id){if(!confirm('Delete this expense?'))return;state.expenses=state.expenses.filter(e=>e.id!==id);save();renderExpenses();renderDashboard();toast('Deleted','error');}
 function renderExpenses(){
-  const fyYear=parseInt(document.getElementById('tax-year-select').value)||2026;
+  const fyYear=parseInt(document.getElementById('tax-year-select').value)||2027;
   const monthFilter=document.getElementById('exp-month-filter').value;
   const catFilter=document.getElementById('exp-cat-filter').value;
   // populate cat filter
@@ -1658,7 +1677,7 @@ function renderExpenses(){
 function filterExpCat(cat){document.getElementById('exp-cat-filter').value=cat;renderExpenses();}
 function viewExpReceipt(eid){const e=state.expenses.find(x=>x.id===eid);if(!e?.receiptData){toast('No file','error');return;}const win=window.open();win.document.write(e.receiptData.startsWith('data:image')?`<img src="${e.receiptData}" style="max-width:100%">`:`<embed src="${e.receiptData}" width="100%" height="100%" type="application/pdf">`);}
 function exportExpensesCSV(){
-  const fyYear=parseInt(document.getElementById('tax-year-select').value)||2026;
+  const fyYear=parseInt(document.getElementById('tax-year-select').value)||2027;
   const fyStart=state.settings.fyStart||3;
   const fyStartDate=new Date(`${fyYear-1}-${String(fyStart).padStart(2,'0')}-01`);
   const fyEndDate=new Date(`${fyYear}-${String(fyStart).padStart(2,'0')}-01`);
@@ -1684,7 +1703,7 @@ function exportExpensesCSV(){
 function shareBookkeeper(){
   const bk=state.settings.bkEmail;
   if(!bk){toast('Set bookkeeper email in Settings first','error');return;}
-  const fyYear=parseInt(document.getElementById('tax-year-select').value)||2026;
+  const fyYear=parseInt(document.getElementById('tax-year-select').value)||2027;
   const s=state.settings;
   const exps=state.expenses;
   const totalExp=exps.reduce((a,e)=>a+e.amount,0);
@@ -1877,7 +1896,7 @@ load();
 // Seed if fresh
 if(state.invoices.length===0&&state.customers.length===0){
   state.customers.push({id:'seed-1',name:'Laerskool Doringkloof Primary',phone:'+27 126 671 977',email:'',addr:'https://www.dories.co.za/',notes:''});
-  state.invoices.push({id:'seed-inv-1',number:'202603845',date:'2026-03-25',due:'2026-04-25',status:'pending',custName:'Laerskool Doringkloof Primary',custPhone:'+27 126 671 977',custEmail:'',custAddr:'https://www.dories.co.za/',notes:'',items:[{desc:'Website Maintenance | Content Updates, Plugins and Theme Updates',price:1050,qty:1,amount:1050}],subtotal:1050,vatAmt:0,total:1050,refundPolicy:'Sofire-IT Support (Juan Du Plessis Freelance) operates under a strict no-refund policy. Once services are completed and delivered to the client\'s satisfaction, no refunds will be issued under any circumstances.',clientObligations:'It is the responsibility of the client to provide clear instructions, feedback, and any necessary materials required for the completion of the services. Failure to do so may result in delays or additional charges, but it does not warrant a refund.'}));
+  state.invoices.push({id:'seed-inv-1',number:'202603845',date:'2026-03-25',due:'2026-04-25',status:'pending',custName:'Laerskool Doringkloof Primary',custPhone:'+27 126 671 977',custEmail:'',custAddr:'https://www.dories.co.za/',notes:'',items:[{desc:'Website Maintenance | Content Updates, Plugins and Theme Updates',price:1050,qty:1,amount:1050}],subtotal:1050,vatAmt:0,total:1050,refundPolicy:"Sofire-IT Support (Juan Du Plessis Freelance) operates under a strict no-refund policy. Once services are completed and delivered to the client's satisfaction, no refunds will be issued under any circumstances.",clientObligations:"It is the responsibility of the client to provide clear instructions, feedback, and any necessary materials required for the completion of the services. Failure to do so may result in delays or additional charges, but it does not warrant a refund."});
   // Seed expense data to match the spreadsheet (March 2024 – Feb 2025)
   const seedMonths=[{m:'2024-03',total:12865.80},{m:'2024-04',total:12511.48},{m:'2024-05',total:40053.94},{m:'2024-06',total:25759.52},{m:'2024-07',total:25725.93},{m:'2024-08',total:29890.38},{m:'2024-09',total:32881.76},{m:'2024-10',total:28682.17},{m:'2024-11',total:32021.50},{m:'2024-12',total:30995.46},{m:'2025-01',total:31716.07},{m:'2025-02',total:28220.19}];
   const seedExpCats=['Bank Charges','Motor Vehicle – Petrol','Wifi / Internet','Laptop / Monitor','House Rent (home office)','Insurance','Cellphone','Vehicle Instalment','Hosting','Microsoft Software','Electricity'];
