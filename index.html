@@ -258,7 +258,7 @@ textarea{resize:vertical;min-height:70px}
 <!-- ===================== DASHBOARD ===================== -->
 <div class="content page active" id="page-dashboard">
   <div class="stats-grid">
-    <div class="stat-card green"><div class="stat-label">Total Earned</div><div class="stat-value" id="stat-earned">R0</div><div class="stat-change">All time received</div></div>
+    <div class="stat-card green"><div class="stat-label">Total Income</div><div class="stat-value" id="stat-earned">R0</div><div class="stat-change">Invoices + salary combined</div></div>
     <div class="stat-card yellow"><div class="stat-label">Outstanding</div><div class="stat-value" id="stat-outstanding">R0</div><div class="stat-change">Pending invoices</div></div>
     <div class="stat-card red"><div class="stat-label">Total Expenses</div><div class="stat-value" id="stat-expenses">R0</div><div class="stat-change">This financial year</div></div>
     <div class="stat-card purple"><div class="stat-label">Net Profit</div><div class="stat-value" id="stat-profit">R0</div><div class="stat-change">Income minus expenses</div></div>
@@ -277,7 +277,7 @@ textarea{resize:vertical;min-height:70px}
         <div style="padding:14px;display:flex;flex-direction:column;gap:9px">
           <button class="btn btn-primary" style="justify-content:center" onclick="nav('create')">＋ Create Invoice</button>
           <button class="btn btn-ghost" style="justify-content:center" onclick="openCustomerModal()">＋ Add Customer</button>
-          <button class="btn btn-ghost" style="justify-content:center" onclick="openPaymentModal()">💳 Record Payment</button>
+          <button class="btn btn-ghost" style="justify-content:center" onclick="openPaymentModal()">💳 Record Income</button>
           <button class="btn btn-ghost" style="justify-content:center" onclick="nav('expenses')">📊 Add Expense</button>
           <button class="btn btn-ghost" style="justify-content:center" onclick="exportData()">⬇ Export Backup</button>
         </div>
@@ -479,15 +479,28 @@ textarea{resize:vertical;min-height:70px}
 
 <!-- ===================== PAYMENTS ===================== -->
 <div class="content page" id="page-payments">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
-    <div style="font-size:13px;color:var(--text2)">Track and record all incoming payments</div>
-    <button class="btn btn-primary" onclick="openPaymentModal()">＋ Record Payment</button>
+  <!-- Income summary stats -->
+  <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+    <div class="stat-card green"><div class="stat-label">Invoice Income</div><div class="stat-value" id="pay-stat-invoices">R0</div><div class="stat-change">From client invoices</div></div>
+    <div class="stat-card blue"><div class="stat-label">Salary Income</div><div class="stat-value" id="pay-stat-salary">R0</div><div class="stat-change">Employment income</div></div>
+    <div class="stat-card purple"><div class="stat-label">Total Gross Income</div><div class="stat-value" id="pay-stat-total">R0</div><div class="stat-change">All sources combined</div></div>
+    <div class="stat-card yellow"><div class="stat-label">PAYE Deducted</div><div class="stat-value" id="pay-stat-paye">R0</div><div class="stat-change">Tax already withheld</div></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <div style="display:flex;gap:8px">
+      <button class="filter-btn active" data-pay-filter="all" onclick="filterPayments(this,'all')">All Income</button>
+      <button class="filter-btn" data-pay-filter="invoice" onclick="filterPayments(this,'invoice')">Invoice Payments</button>
+      <button class="filter-btn" data-pay-filter="salary" onclick="filterPayments(this,'salary')">Salary / Other</button>
+    </div>
+    <button class="btn btn-primary" onclick="openPaymentModal()">＋ Record Income</button>
   </div>
   <div class="card">
-    <div class="card-header"><span class="card-title">Payment History</span></div>
+    <div class="card-header"><span class="card-title">Income History</span></div>
     <div class="table-wrap">
-      <table><thead><tr><th>Date</th><th>Invoice #</th><th>Customer</th><th>Amount</th><th>Method</th><th>Reference</th><th>Proof</th></tr></thead>
-      <tbody id="payments-tbody"><tr><td colspan="7"><div class="empty-state"><div class="empty-icon">💳</div><div class="empty-text">No payments yet</div></div></td></tr></tbody></table>
+      <table>
+        <thead><tr><th>Date</th><th>Type</th><th>Source / Invoice</th><th>Gross Amount</th><th>PAYE</th><th>Net</th><th>Method</th><th>Proof</th></tr></thead>
+        <tbody id="payments-tbody"><tr><td colspan="8"><div class="empty-state"><div class="empty-icon">💳</div><div class="empty-text">No income recorded yet</div></div></td></tr></tbody>
+      </table>
     </div>
   </div>
 </div>
@@ -737,18 +750,51 @@ textarea{resize:vertical;min-height:70px}
 <!-- Payment Modal -->
 <div class="modal-overlay" id="payment-modal">
   <div class="modal">
-    <div class="modal-header"><div class="modal-title">Record Payment</div><button class="modal-close" onclick="closeModal('payment-modal')">×</button></div>
+    <div class="modal-header"><div class="modal-title" id="pay-modal-title">Record Income</div><button class="modal-close" onclick="closeModal('payment-modal')">×</button></div>
     <div class="modal-body">
+      <!-- TYPE TOGGLE -->
+      <div style="display:flex;gap:8px;margin-bottom:16px;background:var(--surface2);border-radius:8px;padding:4px">
+        <button id="pay-type-invoice" onclick="setPayType('invoice')" class="btn btn-primary" style="flex:1;justify-content:center;border-radius:6px;font-size:13px">💳 Invoice Payment</button>
+        <button id="pay-type-salary" onclick="setPayType('salary')" class="btn btn-ghost" style="flex:1;justify-content:center;border-radius:6px;font-size:13px">💼 Salary / Income</button>
+      </div>
       <div class="form-grid">
-        <div class="form-group"><label>Invoice *</label><select id="p-inv-select"></select></div>
-        <div class="form-group"><label>Amount (R) *</label><input type="number" id="p-amount" step="0.01"></div>
-        <div class="form-group"><label>Payment Date *</label><input type="date" id="p-date-input"></div>
+        <!-- Invoice-only fields -->
+        <div class="form-group full" id="p-invoice-row">
+          <label>Invoice</label>
+          <select id="p-inv-select"></select>
+        </div>
+        <!-- Salary-only fields -->
+        <div class="form-group" id="p-employer-row" style="display:none">
+          <label>Employer / Source *</label>
+          <input type="text" id="p-employer" placeholder="e.g. ABC Company (Pty) Ltd">
+        </div>
+        <div class="form-group" id="p-salary-type-row" style="display:none">
+          <label>Income Type</label>
+          <select id="p-salary-type">
+            <option value="salary">Monthly Salary</option>
+            <option value="bonus">Bonus / Commission</option>
+            <option value="overtime">Overtime Pay</option>
+            <option value="freelance">Freelance Income</option>
+            <option value="other">Other Income</option>
+          </select>
+        </div>
+        <div class="form-group" id="p-paye-row" style="display:none">
+          <label>PAYE Deducted (R)</label>
+          <input type="number" id="p-paye" placeholder="0.00" step="0.01" value="0">
+        </div>
+        <div class="form-group" id="p-uif-row" style="display:none">
+          <label>UIF Deducted (R)</label>
+          <input type="number" id="p-uif" placeholder="0.00" step="0.01" value="0">
+        </div>
+        <!-- Shared fields -->
+        <div class="form-group"><label>Gross Amount (R) *</label><input type="number" id="p-amount" step="0.01"></div>
+        <div class="form-group"><label>Date *</label><input type="date" id="p-date-input"></div>
         <div class="form-group"><label>Method</label>
           <select id="p-method"><option>EFT</option><option>Cash</option><option>Card</option><option>PayFast</option><option>SnapScan</option><option>Other</option></select>
         </div>
-        <div class="form-group full"><label>Reference</label><input type="text" id="p-ref" placeholder="Bank reference or transaction ID"></div>
+        <div class="form-group"><label>Reference</label><input type="text" id="p-ref" placeholder="Bank / payslip reference"></div>
         <div class="form-group full">
-          <label>Proof of Payment</label>
+          <label>Proof / Payslip</label>
           <div class="upload-area" id="upload-area" onclick="document.getElementById('pop-file').click()">
             <div style="font-size:24px;margin-bottom:6px">📎</div>
             <div>Click or drag to upload</div>
@@ -757,7 +803,7 @@ textarea{resize:vertical;min-height:70px}
           <input type="file" id="pop-file" accept="image/*,.pdf" style="display:none" onchange="handleFileUpload(this)">
           <div id="upload-preview" style="margin-top:7px;font-size:12px;color:var(--green)"></div>
         </div>
-        <div class="form-group full"><label>Notes</label><textarea id="p-notes-input" style="min-height:55px"></textarea></div>
+        <div class="form-group full"><label>Notes</label><textarea id="p-notes-input" style="min-height:50px"></textarea></div>
       </div>
     </div>
     <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('payment-modal')">Cancel</button><button class="btn btn-green" onclick="savePayment()">✓ Record</button></div>
@@ -1017,7 +1063,10 @@ function removeLogo(){
 // ============================================================
 function renderDashboard(){
   const s=state.settings;
-  const earned=state.payments.reduce((a,p)=>a+parseFloat(p.amount||0),0);
+  const invEarned=state.payments.filter(p=>p.type!=='salary').reduce((a,p)=>a+parseFloat(p.amount||0),0);
+  const salEarned=state.payments.filter(p=>p.type==='salary').reduce((a,p)=>a+parseFloat(p.amount||0),0);
+  const payeCredit=state.payments.filter(p=>p.type==='salary').reduce((a,p)=>a+parseFloat(p.paye||0),0);
+  const earned=invEarned+salEarned;
   const pending=state.invoices.filter(i=>i.status==='pending').reduce((a,i)=>a+parseFloat(i.total||0),0);
   const expTotal=state.expenses.reduce((a,e)=>a+parseFloat(e.amount||0),0);
   const profit=earned-expTotal;
@@ -1028,14 +1077,15 @@ function renderDashboard(){
   document.getElementById('stat-profit').textContent=(profit<0?'-':'')+fmt(profit);
   document.getElementById('stat-profit').style.color=profit<0?'var(--accent)':'var(--green)';
 
-  // Tax quick view
+  // Tax quick view — salary + invoice income combined
   const taxable=Math.max(0,earned-expTotal);
-  const tax=calcSARSTax(taxable);
+  const grossTax=calcSARSTax(taxable);
+  const tax=Math.max(0,grossTax-payeCredit); // subtract PAYE already withheld
   document.getElementById('tax-income').textContent=fmt(earned);
   document.getElementById('tax-exp').textContent=fmt(expTotal);
   document.getElementById('tax-taxable').textContent=fmt(taxable);
-  document.getElementById('tax-sars').textContent=fmt(tax);
-  document.getElementById('tax-vat').textContent=fmt(earned*(s.vatRate/100));
+  document.getElementById('tax-sars').textContent=fmt(tax)+(payeCredit>0?' (after PAYE)':'');
+  document.getElementById('tax-vat').textContent=fmt(invEarned*(s.vatRate/100));
 
   const recent=[...state.invoices].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,6);
   const tbody=document.getElementById('dashboard-invoices-tbody');
@@ -1490,28 +1540,77 @@ async function sendEmailJS(){
 // ============================================================
 //  PAYMENTS
 // ============================================================
+let currentPayFilter='all';
+function filterPayments(btn,filter){
+  document.querySelectorAll('[data-pay-filter]').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  currentPayFilter=filter;
+  renderPayments();
+}
 function renderPayments(){
-  const pays=[...state.payments].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  let pays=[...state.payments].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  // Stats
+  const invTotal=state.payments.filter(p=>p.type!=='salary').reduce((a,p)=>a+parseFloat(p.amount||0),0);
+  const salTotal=state.payments.filter(p=>p.type==='salary').reduce((a,p)=>a+parseFloat(p.amount||0),0);
+  const payeTotal=state.payments.filter(p=>p.type==='salary').reduce((a,p)=>a+parseFloat(p.paye||0),0);
+  const fmt=v=>'R'+v.toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const si=document.getElementById('pay-stat-invoices');if(si)si.textContent=fmt(invTotal);
+  const ss=document.getElementById('pay-stat-salary');if(ss)ss.textContent=fmt(salTotal);
+  const st=document.getElementById('pay-stat-total');if(st)st.textContent=fmt(invTotal+salTotal);
+  const sp=document.getElementById('pay-stat-paye');if(sp)sp.textContent=fmt(payeTotal);
+  // Filter
+  if(currentPayFilter==='invoice') pays=pays.filter(p=>p.type!=='salary');
+  if(currentPayFilter==='salary') pays=pays.filter(p=>p.type==='salary');
   const tbody=document.getElementById('payments-tbody');
+  const isSalary=p=>p.type==='salary';
   tbody.innerHTML=pays.length?pays.map(p=>`
     <tr>
       <td class="mono" style="color:var(--text2)">${p.date}</td>
-      <td class="mono" style="color:var(--accent)">${p.invoiceNumber||'—'}</td>
-      <td>${p.customer||'—'}</td>
+      <td>${isSalary(p)
+        ?`<span class="badge" style="background:rgba(74,158,255,.12);color:var(--blue)">💼 ${p.salaryType||'Salary'}</span>`
+        :`<span class="badge badge-paid">💳 Invoice</span>`}</td>
+      <td style="font-size:12px">${isSalary(p)?(p.employer||'—'):(p.invoiceNumber?`<span style="color:var(--accent)">${p.invoiceNumber}</span> ${p.customer||''}`:'—')}</td>
       <td class="mono" style="color:var(--green)">R${parseFloat(p.amount||0).toFixed(2)}</td>
-      <td><span class="badge badge-paid">${p.method||'EFT'}</span></td>
-      <td style="font-size:11px;color:var(--text2)">${p.ref||'—'}</td>
+      <td class="mono" style="color:${parseFloat(p.paye||0)>0?'var(--yellow)':'var(--text3)'}">
+        ${parseFloat(p.paye||0)>0?'R'+parseFloat(p.paye).toFixed(2):'—'}
+      </td>
+      <td class="mono" style="color:var(--text)">R${(parseFloat(p.amount||0)-parseFloat(p.paye||0)-parseFloat(p.uif||0)).toFixed(2)}</td>
+      <td><span class="badge badge-draft">${p.method||'EFT'}</span></td>
       <td>${p.proofName?`<span class="badge badge-paid" style="cursor:pointer" onclick="viewProof('${p.id}')">📎 ${p.proofName}</span>`:'<span style="color:var(--text3);font-size:11px">—</span>'}</td>
-    </tr>`).join(''):'<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">💳</div><div class="empty-text">No payments yet</div></div></td></tr>';
+    </tr>`).join(''):'<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">💳</div><div class="empty-text">No income recorded yet</div></div></td></tr>';
+}
+let currentPayType='invoice';
+function setPayType(type){
+  currentPayType=type;
+  const isInv=type==='invoice';
+  document.getElementById('pay-type-invoice').className=isInv?'btn btn-primary':'btn btn-ghost';
+  document.getElementById('pay-type-invoice').style.cssText='flex:1;justify-content:center;border-radius:6px;font-size:13px';
+  document.getElementById('pay-type-salary').className=isInv?'btn btn-ghost':'btn btn-blue';
+  document.getElementById('pay-type-salary').style.cssText='flex:1;justify-content:center;border-radius:6px;font-size:13px';
+  document.getElementById('p-invoice-row').style.display=isInv?'':'none';
+  document.getElementById('p-employer-row').style.display=isInv?'none':'';
+  document.getElementById('p-salary-type-row').style.display=isInv?'none':'';
+  document.getElementById('p-paye-row').style.display=isInv?'none':'';
+  document.getElementById('p-uif-row').style.display=isInv?'none':'';
+  document.getElementById('pay-modal-title').textContent=isInv?'Record Invoice Payment':'Record Salary / Income';
+  if(!isInv){document.getElementById('p-method').value='EFT';}
 }
 function openPaymentModal(){
+  currentPayType='invoice';
+  setPayType('invoice');
   const sel=document.getElementById('p-inv-select');
-  sel.innerHTML='<option value="">Select invoice...</option>';
+  sel.innerHTML='<option value="">Select invoice (optional)...</option>';
   state.invoices.filter(i=>i.status!=='paid').forEach(inv=>sel.innerHTML+=`<option value="${inv.id}">${inv.number} – ${inv.custName} (R${parseFloat(inv.total||0).toFixed(2)})</option>`);
   document.getElementById('p-date-input').value=new Date().toISOString().split('T')[0];
-  document.getElementById('p-amount').value='';document.getElementById('p-ref').value='';
-  document.getElementById('p-notes-input').value='';document.getElementById('upload-preview').textContent='';
+  document.getElementById('p-amount').value='';
+  document.getElementById('p-ref').value='';
+  document.getElementById('p-paye').value='0';
+  document.getElementById('p-uif').value='0';
+  document.getElementById('p-employer').value='';
+  document.getElementById('p-notes-input').value='';
+  document.getElementById('upload-preview').textContent='';
   document.getElementById('upload-area').style.borderColor='';
+  document.getElementById('pop-file').value='';
   uploadedFile=null;
   sel.onchange=function(){const inv=state.invoices.find(i=>i.id===this.value);if(inv)document.getElementById('p-amount').value=inv.total;};
   openModal('payment-modal');
@@ -1525,13 +1624,44 @@ ua.addEventListener('dragover',e=>{e.preventDefault();ua.classList.add('dragover
 ua.addEventListener('dragleave',()=>ua.classList.remove('dragover'));
 ua.addEventListener('drop',e=>{e.preventDefault();ua.classList.remove('dragover');uploadedFile=e.dataTransfer.files[0];if(uploadedFile)document.getElementById('upload-preview').textContent='✓ '+uploadedFile.name;});
 function savePayment(){
-  const invId=document.getElementById('p-inv-select').value;
   const amount=document.getElementById('p-amount').value;
   const date=document.getElementById('p-date-input').value;
-  if(!invId||!amount||!date){toast('Fill required fields','error');return;}
-  const inv=state.invoices.find(i=>i.id===invId);
-  const payment={id:Date.now().toString(),invoiceId:invId,invoiceNumber:inv?.number||'',customer:inv?.custName||'',amount:parseFloat(amount),date,method:document.getElementById('p-method').value,ref:document.getElementById('p-ref').value,notes:document.getElementById('p-notes-input').value,proofName:uploadedFile?uploadedFile.name:null};
-  const finish=()=>{state.payments.push(payment);if(inv)inv.status='paid';save();closeModal('payment-modal');renderPayments();renderDashboard();toast('Payment recorded ✓','success');uploadedFile=null;};
+  if(!amount||!date){toast('Amount and date are required','error');return;}
+  const isSal=currentPayType==='salary';
+  // Salary validation
+  if(isSal&&!document.getElementById('p-employer').value.trim()){
+    toast('Please enter the employer / income source','error');return;
+  }
+  const invId=document.getElementById('p-inv-select').value;
+  const inv=invId?state.invoices.find(i=>i.id===invId):null;
+  const payment={
+    id:Date.now().toString(),
+    type:isSal?'salary':'invoice',
+    // Invoice fields
+    invoiceId:invId||'',
+    invoiceNumber:inv?.number||'',
+    customer:inv?.custName||'',
+    // Salary fields
+    employer:isSal?document.getElementById('p-employer').value:'',
+    salaryType:isSal?document.getElementById('p-salary-type').value:'',
+    paye:isSal?parseFloat(document.getElementById('p-paye').value||0):0,
+    uif:isSal?parseFloat(document.getElementById('p-uif').value||0):0,
+    // Shared
+    amount:parseFloat(amount),
+    date,
+    method:document.getElementById('p-method').value,
+    ref:document.getElementById('p-ref').value,
+    notes:document.getElementById('p-notes-input').value,
+    proofName:uploadedFile?uploadedFile.name:null
+  };
+  const finish=()=>{
+    state.payments.push(payment);
+    // Only mark invoice paid if this is an invoice payment
+    if(!isSal&&inv)inv.status='paid';
+    save();closeModal('payment-modal');renderPayments();renderDashboard();
+    toast(isSal?'Salary recorded ✓':'Payment recorded ✓','success');
+    uploadedFile=null;
+  };
   if(uploadedFile){const r=new FileReader();r.onload=e=>{payment.proofData=e.target.result;finish();};r.readAsDataURL(uploadedFile);}
   else finish();
 }
@@ -1639,9 +1769,10 @@ function renderExpenses(){
     </div>`).join('')||'<div style="grid-column:1/-1;color:var(--text3);font-size:13px">No expenses for this period</div>';
   // Tax calc
   const grossIncome=state.payments.filter(p=>{const d=new Date(p.date);return d>=fyStartDate&&d<fyEndDate;}).reduce((a,p)=>a+parseFloat(p.amount||0),0);
+  const fyPayeCredit=state.payments.filter(p=>p.type==='salary'&&(()=>{const d=new Date(p.date);return d>=fyStartDate&&d<fyEndDate;})()).reduce((a,p)=>a+parseFloat(p.paye||0),0);
   const totalExp=exps.reduce((a,e)=>a+parseFloat(e.amount||0),0);
   const taxable=Math.max(0,grossIncome-totalExp);
-  const tax=calcSARSTax(taxable);
+  const tax=Math.max(0,calcSARSTax(taxable)-fyPayeCredit);
   const vatRate=state.settings.vatRate||15;
   const vatOut=grossIncome*(vatRate/100);
   const vatIn=totalExp*(vatRate/100);
@@ -1683,6 +1814,7 @@ function exportExpensesCSV(){
   const fyEndDate=new Date(`${fyYear}-${String(fyStart).padStart(2,'0')}-01`);
   const exps=state.expenses.filter(e=>{const d=new Date(e.date);return d>=fyStartDate&&d<fyEndDate;});
   const grossIncome=state.payments.filter(p=>{const d=new Date(p.date);return d>=fyStartDate&&d<fyEndDate;}).reduce((a,p)=>a+parseFloat(p.amount||0),0);
+  const fyPayeCredit=state.payments.filter(p=>p.type==='salary'&&(()=>{const d=new Date(p.date);return d>=fyStartDate&&d<fyEndDate;})()).reduce((a,p)=>a+parseFloat(p.paye||0),0);
   const totalExp=exps.reduce((a,e)=>a+e.amount,0);
   const taxable=Math.max(0,grossIncome-totalExp);
   let csv=`Sofire-IT Support – Cash Expenses Summary\nFY ${fyYear-1}/${fyYear}\n\n`;
@@ -1777,7 +1909,10 @@ function viewInvoice(id){
 //  ANALYTICS
 // ============================================================
 function renderAnalytics(){
-  const earned=state.payments.reduce((a,p)=>a+parseFloat(p.amount||0),0);
+  const invEarned=state.payments.filter(p=>p.type!=='salary').reduce((a,p)=>a+parseFloat(p.amount||0),0);
+  const salEarned=state.payments.filter(p=>p.type==='salary').reduce((a,p)=>a+parseFloat(p.amount||0),0);
+  const payeCredit=state.payments.filter(p=>p.type==='salary').reduce((a,p)=>a+parseFloat(p.paye||0),0);
+  const earned=invEarned+salEarned;
   const pending=state.invoices.filter(i=>i.status==='pending').reduce((a,i)=>a+parseFloat(i.total||0),0);
   const expTotal=state.expenses.reduce((a,e)=>a+parseFloat(e.amount||0),0);
   const profit=earned-expTotal;
