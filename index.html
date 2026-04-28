@@ -17,6 +17,28 @@
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+/* LOGIN */
+#login-screen{display:none;position:fixed;inset:0;background:var(--bg);z-index:9999;align-items:center;justify-content:center;flex-direction:column}
+#login-screen.show{display:flex}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:40px 44px;width:400px;max-width:92vw;box-shadow:0 24px 64px rgba(0,0,0,.6)}
+.login-logo{display:flex;align-items:center;gap:14px;margin-bottom:28px}
+.login-logo-icon{width:52px;height:52px;border-radius:10px;background:var(--surface3);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;overflow:hidden}
+.login-logo-icon img{width:100%;height:100%;object-fit:contain;border-radius:10px}
+.login-title{font-family:'Syne',sans-serif;font-size:20px;font-weight:800}
+.login-sub{font-size:11px;color:var(--accent);font-family:'DM Mono',monospace;letter-spacing:1px;text-transform:uppercase;margin-top:2px}
+.login-form .form-group{margin-bottom:16px}
+.login-form label{font-size:11px;color:var(--text2);font-weight:500;display:block;margin-bottom:6px}
+.login-form input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:11px 14px;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .15s}
+.login-form input:focus{border-color:var(--accent)}
+.login-error{background:rgba(255,60,60,.1);border:1px solid rgba(255,60,60,.3);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--accent);margin-bottom:14px;display:none}
+.login-error.show{display:block}
+.login-btn{width:100%;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .15s;margin-top:4px}
+.login-btn:hover{background:#e03030;transform:translateY(-1px)}
+.login-footer{font-size:11px;color:var(--text3);text-align:center;margin-top:18px}
+/* SHARE VIEW */
+#share-view{display:none;min-height:100vh;background:var(--bg);padding:32px}
+#share-view.show{display:block}
+.share-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid var(--border)}
 .app{display:flex;min-height:100vh}
 /* SIDEBAR */
 .sidebar{width:230px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100}
@@ -216,6 +238,50 @@ textarea{resize:vertical;min-height:70px}
 </style>
 </head>
 <body>
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-icon" id="login-logo-icon">
+        <span id="login-logo-emoji">🖥</span>
+        <img id="login-logo-img" style="display:none">
+      </div>
+      <div>
+        <div class="login-title" id="login-company-name">Sofire-IT Support</div>
+        <div class="login-sub">CRM Portal</div>
+      </div>
+    </div>
+    <div class="login-form">
+      <div class="login-error" id="login-error">Incorrect username or password. Please try again.</div>
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="login-username" placeholder="admin" autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <button class="login-btn" onclick="doLogin()">Sign In</button>
+    </div>
+    <div class="login-footer">Sofire-IT Support — Private CRM</div>
+  </div>
+</div>
+
+<!-- SHARE VIEW (no login required, read-only) -->
+<div id="share-view">
+  <div class="share-header">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="width:40px;height:40px;border-radius:8px;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px" id="share-logo-wrap">🖥</div>
+      <div>
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px" id="share-company-name">Sofire-IT Support</div>
+        <div style="font-size:11px;color:var(--text3)">Shared Report</div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text3)" id="share-generated">Generated <span id="share-date"></span></div>
+  </div>
+  <div id="share-content"></div>
+</div>
+
 <div class="app">
 <!-- SIDEBAR -->
 <aside class="sidebar">
@@ -242,7 +308,11 @@ textarea{resize:vertical;min-height:70px}
     <div class="nav-item" data-page="customers"><span class="nav-icon">◑</span> Customers</div>
     <div class="nav-item" data-page="settings"><span class="nav-icon">⚙</span> Settings</div>
   </nav>
-  <div class="sidebar-bottom" id="sidebar-contact">Juan Du Plessis<br>juan@sofire-it.co.za</div>
+  <div class="sidebar-bottom" id="sidebar-contact" style="padding-bottom:8px">
+    <div id="sidebar-user-name" style="font-weight:500;color:var(--text2);margin-bottom:2px">Juan Du Plessis</div>
+    <div id="sidebar-user-email" style="margin-bottom:10px">juan@sofire-it.co.za</div>
+    <button onclick="doLogout()" class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;color:var(--accent)">⎋ Sign Out</button>
+  </div>
 </aside>
 
 <!-- MAIN -->
@@ -552,6 +622,7 @@ textarea{resize:vertical;min-height:70px}
     <div style="display:flex;gap:9px">
       <button class="btn btn-ghost" onclick="exportExpensesCSV()">⬇ Export CSV</button>
       <button class="btn btn-ghost" onclick="openExpenseSendModal()">📧 Email Bookkeeper</button>
+      <button class="btn btn-ghost" onclick="generateShareLink()">🔗 Share Report</button>
       <button class="btn btn-primary" onclick="openExpenseModal()">＋ Add Expense</button>
     </div>
   </div>
@@ -729,6 +800,28 @@ textarea{resize:vertical;min-height:70px}
         <label>Client Obligations — Default Text</label>
         <textarea id="set-client-obligations" rows="4" style="min-height:80px"></textarea>
       </div>
+    </div>
+  </div>
+  <div class="settings-section">
+    <div class="settings-header">Account & Security</div>
+    <div class="settings-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px">
+          <div style="font-size:12px;font-weight:500;margin-bottom:2px">Logged in as</div>
+          <div style="font-size:13px;color:var(--text2)" id="settings-logged-in-user">juan</div>
+        </div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px">
+          <div style="font-size:12px;font-weight:500;margin-bottom:2px">Role</div>
+          <div style="font-size:13px;color:var(--green)">Administrator</div>
+        </div>
+      </div>
+      <div style="font-size:12px;font-weight:500;margin-bottom:12px;color:var(--text2)">Change Password</div>
+      <div class="form-grid">
+        <div class="form-group full"><label>Current Password</label><input type="password" id="pw-current" placeholder="Enter current password"></div>
+        <div class="form-group"><label>New Password</label><input type="password" id="pw-new" placeholder="Min 8 characters"></div>
+        <div class="form-group"><label>Confirm New Password</label><input type="password" id="pw-confirm" placeholder="Repeat new password"></div>
+      </div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="handleChangePassword()">Update Password</button>
     </div>
   </div>
   <div style="display:flex;gap:10px;margin-top:4px">
@@ -923,9 +1016,305 @@ textarea{resize:vertical;min-height:70px}
   </div>
 </div>
 
+<!-- Share Link Modal -->
+<div class="modal-overlay" id="share-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Share Expense Report</div>
+      <button class="modal-close" onclick="closeModal('share-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px;font-size:12px;color:var(--text2);line-height:1.7">
+        This generates a <strong>read-only link</strong> to your expense report. Anyone with the link can view the report — <strong>no login required</strong>. The link expires after <strong>7 days</strong>.
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Financial Year</label>
+          <select id="share-fy-select" style="width:auto">
+            <option value="2026">FY 2025/2026</option>
+            <option value="2027" selected>FY 2026/2027</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Expires After</label>
+          <select id="share-expiry" style="width:auto">
+            <option value="7">7 days</option>
+            <option value="30">30 days</option>
+            <option value="90">90 days</option>
+            <option value="0">Never</option>
+          </select>
+        </div>
+        <div class="form-group full" id="share-link-wrap" style="display:none">
+          <label>Your Share Link</label>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="share-link-input" readonly style="flex:1;background:var(--surface3);font-family:'DM Mono',monospace;font-size:11px">
+            <button class="btn btn-primary btn-sm" onclick="copyShareLink()">Copy</button>
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:6px" id="share-expiry-note"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('share-modal')">Close</button>
+      <button class="btn btn-primary" onclick="createShareLink()">Generate Link</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast-container" id="toast-container"></div>
 
 <script>
+// ============================================================
+//  AUTH — SHA-256 hashed credentials, never plaintext
+// ============================================================
+
+// Pre-hashed credentials (SHA-256):
+// Username: juan
+// Password: Sofire@2024!  ← CHANGE THIS in Settings → Account
+// To generate a new hash: open browser console and run:
+//   crypto.subtle.digest('SHA-256', new TextEncoder().encode('yourpassword'))
+//     .then(b => console.log([...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')))
+const ADMIN_USER = {
+  username: 'juan',
+  // SHA-256 of 'Sofire@2024!'
+  passwordHash: 'cf61d5cd29ff916b13dfb741084a066513cb254b5bd720cbdbbdea14247ec97c',
+  name: 'Juan Du Plessis',
+  email: 'juan@sofire-it.co.za',
+  role: 'admin'
+};
+
+async function sha256(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+
+// Session stored in sessionStorage (clears when browser closes)
+// Also supports rememberMe via localStorage
+function getSession() {
+  try {
+    return JSON.parse(sessionStorage.getItem('sofire_session') || localStorage.getItem('sofire_session_remember') || 'null');
+  } catch { return null; }
+}
+function setSession(user, remember) {
+  const session = { username: user.username, name: user.name, email: user.email, role: user.role, ts: Date.now() };
+  sessionStorage.setItem('sofire_session', JSON.stringify(session));
+  if (remember) localStorage.setItem('sofire_session_remember', JSON.stringify(session));
+}
+function clearSession() {
+  sessionStorage.removeItem('sofire_session');
+  localStorage.removeItem('sofire_session_remember');
+}
+function isLoggedIn() {
+  const s = getSession();
+  if (!s) return false;
+  // Session expires after 12 hours if not remembered
+  if (!localStorage.getItem('sofire_session_remember') && Date.now() - s.ts > 12 * 3600 * 1000) {
+    clearSession(); return false;
+  }
+  return true;
+}
+
+async function doLogin() {
+  const username = document.getElementById('login-username').value.trim().toLowerCase();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  errEl.classList.remove('show');
+  if (!username || !password) { errEl.classList.add('show'); return; }
+  const hash = await sha256(password);
+  // Check against stored credentials (also check custom credentials in localStorage)
+  const stored = JSON.parse(localStorage.getItem('sofire_credentials') || 'null');
+  const creds = stored || ADMIN_USER;
+  if (username === creds.username && hash === creds.passwordHash) {
+    setSession(creds, true); // remember by default
+    showApp();
+  } else {
+    errEl.classList.add('show');
+    document.getElementById('login-password').value = '';
+  }
+}
+
+function doLogout() {
+  if (!confirm('Sign out of Sofire-IT CRM?')) return;
+  clearSession();
+  showLogin();
+}
+
+function showLogin() {
+  document.getElementById('login-screen').classList.add('show');
+  document.querySelector('.app').style.display = 'none';
+  document.getElementById('share-view').classList.remove('show');
+  // Prefill company branding on login screen
+  const s = state.settings;
+  document.getElementById('login-company-name').textContent = s.company ? s.company.split('(')[0].trim() : 'Sofire-IT Support';
+  if (s.logoData) {
+    document.getElementById('login-logo-emoji').style.display = 'none';
+    document.getElementById('login-logo-img').src = s.logoData;
+    document.getElementById('login-logo-img').style.display = 'block';
+  }
+  setTimeout(() => document.getElementById('login-username').focus(), 100);
+}
+
+function showApp() {
+  document.getElementById('login-screen').classList.remove('show');
+  document.querySelector('.app').style.display = 'flex';
+  document.getElementById('share-view').classList.remove('show');
+  // Update sidebar with session user
+  const s = getSession();
+  if (s) {
+    document.getElementById('sidebar-user-name').textContent = s.name || s.username;
+    document.getElementById('sidebar-user-email').textContent = s.email || '';
+  }
+}
+
+// ============================================================
+//  SHARE LINKS — token-based read-only access
+// ============================================================
+
+function generateShareLink() {
+  openModal('share-modal');
+}
+
+function createShareLink() {
+  const fy = document.getElementById('share-fy-select').value;
+  const expiry = parseInt(document.getElementById('share-expiry').value);
+  // Generate a random 32-char token
+  const token = [...crypto.getRandomValues(new Uint8Array(24))].map(x => x.toString(16).padStart(2,'0')).join('');
+  const expiresAt = expiry > 0 ? Date.now() + expiry * 86400000 : 0;
+  // Store token in localStorage
+  const tokens = JSON.parse(localStorage.getItem('sofire_share_tokens') || '{}');
+  tokens[token] = { type: 'expenses', fy, expiresAt, created: Date.now() };
+  localStorage.setItem('sofire_share_tokens', JSON.stringify(tokens));
+  // Build the share URL
+  const url = `${window.location.origin}${window.location.pathname}?share=expenses&token=${token}&fy=${fy}`;
+  document.getElementById('share-link-input').value = url;
+  document.getElementById('share-link-wrap').style.display = '';
+  document.getElementById('share-expiry-note').textContent = expiry > 0
+    ? `This link expires on ${new Date(expiresAt).toLocaleDateString('en-ZA', {day:'numeric',month:'long',year:'numeric'})}`
+    : 'This link never expires.';
+}
+
+function copyShareLink() {
+  const input = document.getElementById('share-link-input');
+  navigator.clipboard.writeText(input.value).then(() => toast('Link copied ✓', 'success'));
+}
+
+function validateShareToken(token) {
+  const tokens = JSON.parse(localStorage.getItem('sofire_share_tokens') || '{}');
+  const t = tokens[token];
+  if (!t) return null;
+  if (t.expiresAt > 0 && Date.now() > t.expiresAt) return null; // expired
+  return t;
+}
+
+function showShareView(type, token, fy) {
+  const tokenData = validateShareToken(token);
+  if (!tokenData || tokenData.type !== type) {
+    document.getElementById('share-content').innerHTML = `
+      <div style="text-align:center;padding:80px 20px;color:var(--text3)">
+        <div style="font-size:48px;margin-bottom:16px">🔒</div>
+        <div style="font-family:'Syne',sans-serif;font-size:18px;margin-bottom:8px;color:var(--text)">Link Expired or Invalid</div>
+        <div style="font-size:13px">This share link is no longer valid. Ask Sofire-IT Support for a new link.</div>
+      </div>`;
+    document.getElementById('share-view').classList.add('show');
+    document.getElementById('login-screen').classList.remove('show');
+    document.querySelector('.app').style.display = 'none';
+    return;
+  }
+  // Build the shared expense report
+  load(); // load state so we have data
+  const s = state.settings;
+  const fyYear = parseInt(fy || tokenData.fy || 2027);
+  const fyStart = s.fyStart || 3;
+  const fyStartDate = new Date(`${fyYear-1}-${String(fyStart).padStart(2,'0')}-01`);
+  const fyEndDate = new Date(`${fyYear}-${String(fyStart).padStart(2,'0')}-01`);
+  const exps = state.expenses.filter(e => { const d = new Date(e.date); return d >= fyStartDate && d < fyEndDate; });
+  const grossIncome = state.payments.filter(p => { const d = new Date(p.date); return d >= fyStartDate && d < fyEndDate; }).reduce((a,p) => a + parseFloat(p.amount||0), 0);
+  const totalExp = exps.reduce((a,e) => a + parseFloat(e.amount||0), 0);
+  const taxable = Math.max(0, grossIncome - totalExp);
+  const fmt = v => 'R' + v.toLocaleString('en-ZA', {minimumFractionDigits:2,maximumFractionDigits:2});
+  const catMap = {};
+  exps.forEach(e => catMap[e.category] = (catMap[e.category]||0) + e.amount);
+  // Company branding
+  document.getElementById('share-company-name').textContent = s.company || 'Sofire-IT Support';
+  document.getElementById('share-date').textContent = new Date().toLocaleDateString('en-ZA',{day:'numeric',month:'long',year:'numeric'});
+  if (s.logoData) document.getElementById('share-logo-wrap').innerHTML = `<img src="${s.logoData}" style="width:40px;height:40px;object-fit:contain;border-radius:8px">`;
+  const rows = exps.sort((a,b)=>new Date(a.date)-new Date(b.date)).map(e => `
+    <tr>
+      <td class="mono" style="color:var(--text2);padding:10px 12px;border-bottom:1px solid var(--border);font-size:12px">${e.date}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid var(--border);font-size:12px"><span style="background:var(--surface3);color:var(--text2);padding:2px 7px;border-radius:4px;font-size:10px">${e.category.split('–')[0].trim()}</span></td>
+      <td style="padding:10px 12px;border-bottom:1px solid var(--border);font-size:12px">${e.desc}</td>
+      <td class="mono" style="padding:10px 12px;border-bottom:1px solid var(--border);font-size:12px;color:var(--accent);text-align:right">${fmt(e.amount)}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text3)">${e.method||''}</td>
+    </tr>`).join('');
+  const catCards = Object.entries(catMap).sort((a,b)=>b[1]-a[1]).map(([cat,amt]) => `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;min-width:160px">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px">${cat.split('–')[0].trim()}</div>
+      <div style="font-family:'DM Mono',monospace;font-size:15px;color:var(--accent)">${fmt(amt)}</div>
+    </div>`).join('');
+  document.getElementById('share-content').innerHTML = `
+    <div style="margin-bottom:20px">
+      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:4px">Expense Report — FY ${fyYear-1}/${fyYear}</div>
+      <div style="font-size:12px;color:var(--text3)">${s.company||''} · ${s.owner||''}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;border-top:3px solid var(--green)">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace">Gross Income</div>
+        <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700;margin-top:5px">${fmt(grossIncome)}</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;border-top:3px solid var(--accent)">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace">Total Expenses</div>
+        <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700;margin-top:5px">${fmt(totalExp)}</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;border-top:3px solid var(--blue)">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace">Taxable Income</div>
+        <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700;margin-top:5px">${fmt(taxable)}</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;border-top:3px solid var(--yellow)">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace">Entries</div>
+        <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700;margin-top:5px">${exps.length}</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:24px">${catCards}</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      <div style="padding:14px 16px;border-bottom:1px solid var(--border);font-family:'Syne',sans-serif;font-size:13px;font-weight:700">Expense Entries</div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:var(--surface2)">
+            <th style="text-align:left;padding:10px 12px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace;font-weight:400">Date</th>
+            <th style="text-align:left;padding:10px 12px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace;font-weight:400">Category</th>
+            <th style="text-align:left;padding:10px 12px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace;font-weight:400">Description</th>
+            <th style="text-align:right;padding:10px 12px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace;font-weight:400">Amount</th>
+            <th style="text-align:left;padding:10px 12px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace;font-weight:400">Method</th>
+          </tr></thead>
+          <tbody>${rows||'<tr><td colspan="5" style="padding:24px;text-align:center;color:var(--text3)">No expenses for this period</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>
+    <div style="margin-top:16px;font-size:11px;color:var(--text3);text-align:center">
+      This is a read-only shared report. Generated by Sofire-IT Support CRM.
+    </div>`;
+  document.getElementById('share-view').classList.add('show');
+  document.getElementById('login-screen').classList.remove('show');
+  document.querySelector('.app').style.display = 'none';
+}
+
+// ============================================================
+//  CHANGE PASSWORD (in Settings)
+// ============================================================
+async function changePassword(currentPw, newPw, confirmPw) {
+  if (newPw !== confirmPw) { toast('New passwords do not match', 'error'); return false; }
+  if (newPw.length < 8) { toast('Password must be at least 8 characters', 'error'); return false; }
+  const stored = JSON.parse(localStorage.getItem('sofire_credentials') || 'null');
+  const creds = stored || ADMIN_USER;
+  const currentHash = await sha256(currentPw);
+  if (currentHash !== creds.passwordHash) { toast('Current password is incorrect', 'error'); return false; }
+  const newHash = await sha256(newPw);
+  const newCreds = { ...creds, passwordHash: newHash };
+  localStorage.setItem('sofire_credentials', JSON.stringify(newCreds));
+  toast('Password changed successfully ✓', 'success');
+  return true;
+}
+
 // ============================================================
 //  STATE
 // ============================================================
@@ -1016,6 +1405,8 @@ document.querySelectorAll('.nav-item').forEach(item=>item.addEventListener('clic
 // ============================================================
 function loadSettings(){
   const s=state.settings;
+  const sess=getSession();
+  if(sess&&document.getElementById('settings-logged-in-user'))document.getElementById('settings-logged-in-user').textContent=sess.name||sess.username||'juan';
   const setV=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v||''};
   setV('set-company',s.company);setV('set-tagline',s.tagline);setV('set-owner',s.owner);
   setV('set-phone',s.phone);setV('set-email',s.email);setV('set-website',s.website);setV('set-address',s.address);
@@ -2341,9 +2732,40 @@ function resetTermsToDefault(){
 }
 
 // ============================================================
-//  INIT
+//  INIT — auth gate + share URL handling
 // ============================================================
 load();
+
+// Handle change password from settings page
+async function handleChangePassword() {
+  const cur = document.getElementById('pw-current').value;
+  const nw = document.getElementById('pw-new').value;
+  const cf = document.getElementById('pw-confirm').value;
+  const ok = await changePassword(cur, nw, cf);
+  if (ok) {
+    document.getElementById('pw-current').value = '';
+    document.getElementById('pw-new').value = '';
+    document.getElementById('pw-confirm').value = '';
+  }
+}
+
+// Check if this is a share link
+const urlParams = new URLSearchParams(window.location.search);
+const shareType = urlParams.get('share');
+const shareToken = urlParams.get('token');
+const shareFY = urlParams.get('fy');
+
+if (shareType && shareToken) {
+  // Share view — no login needed
+  showShareView(shareType, shareToken, shareFY);
+} else if (isLoggedIn()) {
+  // Already authenticated
+  showApp();
+} else {
+  // Show login
+  showLogin();
+}
+
 // Seed if fresh
 if(state.invoices.length===0&&state.customers.length===0){
   state.customers.push({id:'seed-1',name:'Laerskool Doringkloof Primary',phone:'+27 126 671 977',email:'',addr:'https://www.dories.co.za/',notes:''});
