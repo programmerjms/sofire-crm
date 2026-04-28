@@ -546,23 +546,119 @@ textarea{resize:vertical;min-height:70px}
 
 <!-- ===================== PAYMENTS ===================== -->
 <div class="content page" id="page-payments">
-  <!-- Income summary stats -->
-  <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
-    <div class="stat-card green"><div class="stat-label">Invoice Income</div><div class="stat-value" id="pay-stat-invoices">R0</div><div class="stat-change">From client invoices</div></div>
-    <div class="stat-card blue"><div class="stat-label">Salary Income</div><div class="stat-value" id="pay-stat-salary">R0</div><div class="stat-change">Employment income</div></div>
-    <div class="stat-card purple"><div class="stat-label">Total Gross Income</div><div class="stat-value" id="pay-stat-total">R0</div><div class="stat-change">All sources combined</div></div>
-    <div class="stat-card yellow"><div class="stat-label">PAYE Deducted</div><div class="stat-value" id="pay-stat-paye">R0</div><div class="stat-change">Tax already withheld</div></div>
-  </div>
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-    <div style="display:flex;gap:8px">
-      <button class="filter-btn active" data-pay-filter="all" onclick="filterPayments(this,'all')">All Income</button>
-      <button class="filter-btn" data-pay-filter="invoice" onclick="filterPayments(this,'invoice')">Invoice Payments</button>
-      <button class="filter-btn" data-pay-filter="salary" onclick="filterPayments(this,'salary')">Salary / Other</button>
+
+  <!-- TOP BAR: FY selector + type filter + add button -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <!-- Tax Year Selector -->
+      <div style="display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 12px">
+        <span style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.8px">Tax Year</span>
+        <select id="pay-fy-select" onchange="renderPayments()" style="background:transparent;border:none;color:var(--text);font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;outline:none;cursor:pointer;padding:0">
+          <option value="all">All Years</option>
+          <option value="2025">FY 2024/2025</option>
+          <option value="2026" selected>FY 2025/2026</option>
+          <option value="2027">FY 2026/2027</option>
+          <option value="2028">FY 2027/2028</option>
+        </select>
+      </div>
+      <!-- Type filter tabs -->
+      <div style="display:flex;gap:6px">
+        <button class="filter-btn active" data-pay-filter="all" onclick="filterPayments(this,'all')">All</button>
+        <button class="filter-btn" data-pay-filter="invoice" onclick="filterPayments(this,'invoice')">Invoice</button>
+        <button class="filter-btn" data-pay-filter="salary" onclick="filterPayments(this,'salary')">Salary</button>
+      </div>
     </div>
     <button class="btn btn-primary" onclick="openPaymentModal()">＋ Record Income</button>
   </div>
+
+  <!-- INCOME STAT CARDS -->
+  <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+    <div class="stat-card green">
+      <div class="stat-label">Invoice Income</div>
+      <div class="stat-value" id="pay-stat-invoices">R0</div>
+      <div class="stat-change" id="pay-stat-invoices-lbl">From client invoices</div>
+    </div>
+    <div class="stat-card blue">
+      <div class="stat-label">Salary Income</div>
+      <div class="stat-value" id="pay-stat-salary">R0</div>
+      <div class="stat-change" id="pay-stat-salary-lbl">Employment income</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="stat-label">Total Gross Income</div>
+      <div class="stat-value" id="pay-stat-total">R0</div>
+      <div class="stat-change" id="pay-stat-period-lbl">All sources combined</div>
+    </div>
+    <div class="stat-card yellow">
+      <div class="stat-label">PAYE Deducted</div>
+      <div class="stat-value" id="pay-stat-paye">R0</div>
+      <div class="stat-change">Tax already withheld</div>
+    </div>
+  </div>
+
+  <!-- TAX BREAKDOWN PANEL (shown when a specific FY is selected) -->
+  <div id="pay-tax-panel" class="card" style="margin-bottom:20px;display:none">
+    <div class="card-header">
+      <span class="card-title">🇿🇦 SARS Tax Calculation — <span id="pay-tax-fy-label">FY</span></span>
+      <span style="font-size:11px;color:var(--text3)">Based on 2025/2026 tax brackets</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;padding:0">
+      <!-- Col 1: Income -->
+      <div style="padding:18px 20px;border-right:1px solid var(--border)">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace;margin-bottom:12px">Income Breakdown</div>
+        <div class="tax-row"><span class="tax-label">Invoice Income</span><span class="tax-val" id="ptax-invoices">R0</span></div>
+        <div class="tax-row"><span class="tax-label">Salary Income</span><span class="tax-val" id="ptax-salary">R0</span></div>
+        <div class="tax-row" style="border-top:1px solid var(--border);margin-top:4px;padding-top:8px">
+          <span class="tax-label" style="color:var(--text);font-weight:500">Total Gross Income</span>
+          <span class="tax-val" style="color:var(--green);font-size:16px" id="ptax-gross">R0</span>
+        </div>
+        <div class="tax-row"><span class="tax-label">Less: Expenses</span><span class="tax-val" id="ptax-expenses">R0</span></div>
+        <div class="tax-row highlight">
+          <span class="tax-label">Taxable Income</span>
+          <span class="tax-val" id="ptax-taxable">R0</span>
+        </div>
+      </div>
+      <!-- Col 2: SARS Tax -->
+      <div style="padding:18px 20px;border-right:1px solid var(--border)">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace;margin-bottom:12px">SARS Income Tax</div>
+        <div class="tax-row"><span class="tax-label">Gross Tax (before rebates)</span><span class="tax-val" id="ptax-gross-tax">R0</span></div>
+        <div class="tax-row"><span class="tax-label">Primary Rebate</span><span class="tax-val" style="color:var(--green)" id="ptax-rebate">−R17,235</span></div>
+        <div class="tax-row"><span class="tax-label">PAYE Already Paid</span><span class="tax-val" style="color:var(--green)" id="ptax-paye-credit">−R0</span></div>
+        <div class="tax-row" style="border-top:1px solid var(--border);margin-top:4px;padding-top:8px">
+          <span class="tax-label" style="color:var(--text);font-weight:500">Tax Still Owed</span>
+          <span class="tax-val" style="font-size:16px" id="ptax-owed">R0</span>
+        </div>
+        <div class="tax-row"><span class="tax-label">Effective Tax Rate</span><span class="tax-val" id="ptax-rate">0%</span></div>
+        <div class="tax-row"><span class="tax-label">Tax Bracket</span><span class="tax-val" style="font-size:11px" id="ptax-bracket">—</span></div>
+      </div>
+      <!-- Col 3: Provisional Tax -->
+      <div style="padding:18px 20px">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace;margin-bottom:12px">Provisional Tax Guide</div>
+        <div class="tax-row"><span class="tax-label">Annual Tax Owed</span><span class="tax-val" id="ptax-annual">R0</span></div>
+        <div class="tax-row"><span class="tax-label">1st Payment (Aug/Sep)</span><span class="tax-val" id="ptax-prov1">R0</span></div>
+        <div class="tax-row"><span class="tax-label">2nd Payment (Feb/Mar)</span><span class="tax-val" id="ptax-prov2">R0</span></div>
+        <div style="margin-top:14px;padding:10px 12px;background:var(--surface2);border-radius:8px;font-size:11px;color:var(--text3);line-height:1.7">
+          Per month set aside:<br>
+          <span style="font-family:'DM Mono',monospace;font-size:14px;color:var(--yellow)" id="ptax-monthly">R0</span>
+        </div>
+        <div style="margin-top:10px;font-size:10px;color:var(--text3);line-height:1.6">
+          ⚠ Estimates only. Consult your tax practitioner for official submissions.
+        </div>
+      </div>
+    </div>
+    <!-- Monthly breakdown bar chart -->
+    <div style="border-top:1px solid var(--border);padding:18px 20px">
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace;margin-bottom:14px">Monthly Income — <span id="pay-monthly-fy-label">FY</span></div>
+      <div id="pay-monthly-bars" style="display:flex;align-items:flex-end;gap:6px;height:80px"></div>
+      <div id="pay-monthly-labels" style="display:flex;gap:6px;margin-top:5px"></div>
+    </div>
+  </div>
+
+  <!-- INCOME TABLE -->
   <div class="card">
-    <div class="card-header"><span class="card-title">Income History</span></div>
+    <div class="card-header">
+      <span class="card-title">Income Records</span>
+      <span style="font-size:11px;color:var(--text3)" id="pay-table-period">All time</span>
+    </div>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Date</th><th>Type</th><th>Source / Invoice</th><th>Gross Amount</th><th>PAYE</th><th>Net</th><th>Method</th><th>Proof</th><th>Actions</th></tr></thead>
@@ -1396,7 +1492,34 @@ function nav(page){
   document.getElementById('pageTitle').textContent=pageTitles[page]||page;
   if(page==='dashboard')renderDashboard();
   if(page==='invoices')renderInvoices();
-  if(page==='payments')renderPayments();
+  if(page==='payments'){
+    // Auto-select the FY that contains the most income data
+    const payFySel=document.getElementById('pay-fy-select');
+    if(payFySel&&payFySel.value==='2026'){
+      const now=new Date();
+      const fyStart=state.settings.fyStart||3;
+      const candidateFY=now.getMonth()+1>=fyStart?now.getFullYear()+1:now.getFullYear();
+      // Check if current FY has data, else find the one that does
+      const fyHasIncome=fy=>{
+        const fyn=parseInt(fy);
+        const s=new Date(`${fyn-1}-${String(fyStart).padStart(2,'0')}-01`);
+        const e=new Date(`${fyn}-${String(fyStart).padStart(2,'0')}-01`);
+        return state.payments.some(p=>{const d=new Date(p.date);return d>=s&&d<e;});
+      };
+      // Try current FY, then previous, then all
+      const bestFY=fyHasIncome(candidateFY)?candidateFY:
+                   fyHasIncome(candidateFY-1)?candidateFY-1:
+                   fyHasIncome(candidateFY-2)?candidateFY-2:'all';
+      // Add option if not present
+      if(bestFY!=='all'&&![...payFySel.options].find(o=>parseInt(o.value)===bestFY)){
+        const opt=document.createElement('option');
+        opt.value=bestFY;opt.textContent=`FY ${bestFY-1}/${bestFY}`;
+        payFySel.insertBefore(opt, payFySel.lastElementChild);
+      }
+      payFySel.value=String(bestFY);
+    }
+    renderPayments();
+  }
   if(page==='analytics'){renderAnalytics();}
   if(page==='expenses'){
     // Auto-select the FY that contains today
@@ -2275,20 +2398,109 @@ function filterPayments(btn,filter){
   currentPayFilter=filter;
   renderPayments();
 }
+
+// Returns {start, end} Date objects for a given SA FY year (e.g. 2026 = Mar 2025 – Feb 2026)
+function getFYDates(fyYear){
+  const fyStart=state.settings.fyStart||3;
+  return {
+    start: new Date(`${fyYear-1}-${String(fyStart).padStart(2,'0')}-01`),
+    end:   new Date(`${fyYear}-${String(fyStart).padStart(2,'0')}-01`)
+  };
+}
+
+function inFY(dateStr, fyYear){
+  if(fyYear==='all') return true;
+  const d=new Date(dateStr);
+  const {start,end}=getFYDates(parseInt(fyYear));
+  return d>=start && d<end;
+}
+
+// Get which SARS tax bracket applies
+function taxBracketLabel(income){
+  if(income<=237100)  return '18% bracket (R0 – R237 100)';
+  if(income<=370500)  return '26% bracket (R237 101 – R370 500)';
+  if(income<=512800)  return '31% bracket (R370 501 – R512 800)';
+  if(income<=673000)  return '36% bracket (R512 801 – R673 000)';
+  if(income<=857900)  return '39% bracket (R673 001 – R857 900)';
+  if(income<=1817000) return '41% bracket (R857 901 – R1 817 000)';
+  return '45% bracket (R1 817 001+)';
+}
+
 function renderPayments(){
-  let pays=[...state.payments].sort((a,b)=>new Date(b.date)-new Date(a.date));
-  // Stats
-  const invTotal=state.payments.filter(p=>p.type!=='salary').reduce((a,p)=>a+parseFloat(p.amount||0),0);
-  const salTotal=state.payments.filter(p=>p.type==='salary').reduce((a,p)=>a+parseFloat(p.amount||0),0);
-  const payeTotal=state.payments.filter(p=>p.type==='salary').reduce((a,p)=>a+parseFloat(p.paye||0),0);
-  const fmt=v=>'R'+v.toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fyVal=document.getElementById('pay-fy-select')?.value||'all';
+  const fmt=v=>'R'+Math.abs(parseFloat(v||0)).toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  // ── Filter payments to selected FY
+  const fyPays=state.payments.filter(p=>inFY(p.date,fyVal));
+  const invTotal=fyPays.filter(p=>p.type!=='salary').reduce((a,p)=>a+parseFloat(p.amount||0),0);
+  const salTotal=fyPays.filter(p=>p.type==='salary').reduce((a,p)=>a+parseFloat(p.amount||0),0);
+  const payeTotal=fyPays.filter(p=>p.type==='salary').reduce((a,p)=>a+parseFloat(p.paye||0),0);
+  const grossTotal=invTotal+salTotal;
+
+  // ── Update stat cards
   const si=document.getElementById('pay-stat-invoices');if(si)si.textContent=fmt(invTotal);
   const ss=document.getElementById('pay-stat-salary');if(ss)ss.textContent=fmt(salTotal);
-  const st=document.getElementById('pay-stat-total');if(st)st.textContent=fmt(invTotal+salTotal);
+  const st=document.getElementById('pay-stat-total');if(st)st.textContent=fmt(grossTotal);
   const sp=document.getElementById('pay-stat-paye');if(sp)sp.textContent=fmt(payeTotal);
-  // Filter
+  const periodLbl=fyVal==='all'?'All time':`FY ${parseInt(fyVal)-1}/${fyVal}`;
+  const ppl=document.getElementById('pay-stat-period-lbl');if(ppl)ppl.textContent=periodLbl;
+  const ptl=document.getElementById('pay-table-period');if(ptl)ptl.textContent=periodLbl;
+  const pil=document.getElementById('pay-stat-invoices-lbl');if(pil)pil.textContent=fyVal==='all'?'All time':periodLbl;
+  const psl=document.getElementById('pay-stat-salary-lbl');if(psl)psl.textContent=fyVal==='all'?'All time':periodLbl;
+
+  // ── Tax breakdown panel (only when a specific FY selected)
+  const taxPanel=document.getElementById('pay-tax-panel');
+  if(taxPanel){
+    if(fyVal==='all'){
+      taxPanel.style.display='none';
+    } else {
+      taxPanel.style.display='';
+      const fyYear=parseInt(fyVal);
+      const fyLabel=`FY ${fyYear-1}/${fyYear} (${fyYear===2026?'Mar 2024':'Mar '+String(fyYear-1).slice(2)} – ${fyYear===2026?'Feb 2025':'Feb '+String(fyYear).slice(2)})`;
+      const lbl=document.getElementById('pay-tax-fy-label');if(lbl)lbl.textContent=fyLabel;
+      const mlbl=document.getElementById('pay-monthly-fy-label');if(mlbl)mlbl.textContent=fyLabel;
+
+      // Get expenses for this FY
+      const {start,end}=getFYDates(fyYear);
+      const fyExps=state.expenses.filter(e=>{const d=new Date(e.date);return d>=start&&d<end;});
+      const totalExp=fyExps.reduce((a,e)=>a+parseFloat(e.amount||0),0);
+      const taxable=Math.max(0,grossTotal-totalExp);
+      const grossTax=calcSARSTax(taxable);
+      const primaryRebate=17235;
+      const taxAfterRebate=Math.max(0,grossTax-primaryRebate);
+      const taxOwed=Math.max(0,taxAfterRebate-payeTotal);
+      const effRate=grossTotal>0?((taxAfterRebate/grossTotal)*100):0;
+
+      // Update tax panel elements
+      const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+      set('ptax-invoices',fmt(invTotal));
+      set('ptax-salary',fmt(salTotal));
+      set('ptax-gross',fmt(grossTotal));
+      set('ptax-expenses','−'+fmt(totalExp));
+      set('ptax-taxable',fmt(taxable));
+      set('ptax-gross-tax',fmt(grossTax));
+      set('ptax-rebate','−'+fmt(primaryRebate));
+      set('ptax-paye-credit',payeTotal>0?'−'+fmt(payeTotal):'−R0.00');
+      const owedEl=document.getElementById('ptax-owed');
+      if(owedEl){owedEl.textContent=fmt(taxOwed);owedEl.style.color=taxOwed>0?'var(--accent)':'var(--green)';}
+      set('ptax-rate',effRate.toFixed(1)+'%');
+      set('ptax-bracket',taxBracketLabel(taxable));
+      set('ptax-annual',fmt(taxOwed));
+      set('ptax-prov1',fmt(taxOwed/2));
+      set('ptax-prov2',fmt(taxOwed/2));
+      const monthly=document.getElementById('ptax-monthly');
+      if(monthly)monthly.textContent=fmt(taxOwed/12)+' / month';
+
+      // ── Monthly income bar chart
+      renderMonthlyBars(fyYear, start, end);
+    }
+  }
+
+  // ── Filter table rows
+  let pays=[...fyPays].sort((a,b)=>new Date(b.date)-new Date(a.date));
   if(currentPayFilter==='invoice') pays=pays.filter(p=>p.type!=='salary');
   if(currentPayFilter==='salary') pays=pays.filter(p=>p.type==='salary');
+
   const tbody=document.getElementById('payments-tbody');
   const isSalary=p=>p.type==='salary';
   tbody.innerHTML=pays.length?pays.map(p=>`
@@ -2309,7 +2521,49 @@ function renderPayments(){
         <button class="btn btn-ghost btn-sm" onclick="editPayment('${p.id}')">Edit</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--accent)" onclick="deletePayment('${p.id}')">✕</button>
       </div></td>
-    </tr>`).join(''):'<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">💳</div><div class="empty-text">No income recorded yet</div></div></td></tr>';
+    </tr>`).join(''):'<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">💳</div><div class="empty-text">No income for this period</div></div></td></tr>';
+}
+
+function renderMonthlyBars(fyYear, fyStart, fyEnd){
+  const barsEl=document.getElementById('pay-monthly-bars');
+  const labelsEl=document.getElementById('pay-monthly-labels');
+  if(!barsEl||!labelsEl) return;
+
+  // Build 12 months for this FY (Mar → Feb)
+  const months=[];
+  let d=new Date(fyStart);
+  while(d<fyEnd){
+    months.push({
+      label:d.toLocaleString('en-ZA',{month:'short'}),
+      year:d.getFullYear(),
+      month:d.getMonth()
+    });
+    d=new Date(d.getFullYear(), d.getMonth()+1, 1);
+  }
+
+  // Sum income per month
+  const monthTotals=months.map(m=>{
+    return state.payments
+      .filter(p=>{const pd=new Date(p.date);return pd.getFullYear()===m.year&&pd.getMonth()===m.month;})
+      .reduce((a,p)=>a+parseFloat(p.amount||0),0);
+  });
+
+  const maxVal=Math.max(...monthTotals,1);
+
+  barsEl.innerHTML=monthTotals.map((val,i)=>{
+    const h=Math.max(4,Math.round((val/maxVal)*76));
+    const hasData=val>0;
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:default" title="${months[i].label}: R${val.toLocaleString('en-ZA',{minimumFractionDigits:2})}">
+      <div style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;white-space:nowrap">
+        ${hasData?'R'+Math.round(val/1000)+'k':''}
+      </div>
+      <div style="width:100%;height:${h}px;background:${hasData?'var(--green)':'var(--surface3)'};border-radius:3px 3px 0 0;transition:height .3s;min-height:4px"></div>
+    </div>`;
+  }).join('');
+
+  labelsEl.innerHTML=months.map(m=>
+    `<div style="flex:1;text-align:center;font-size:9px;color:var(--text3);font-family:'DM Mono',monospace">${m.label}</div>`
+  ).join('');
 }
 let currentPayType='invoice';
 function setPayType(type){
