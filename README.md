@@ -31,16 +31,3 @@ To restore from backup: open browser console and run:
 ```js
 localStorage.setItem('sofire_crm', '<paste JSON here>');
 location.reload();
-```
-
-## 🏦 Bank Details (Pre-configured)
-
-- **Bank:** FNB/RMB  
-- **Account Holder:** Sofireit Support  
-- **Account Type:** First Business Zero Account  
-- **Account Number:** 63095872032  
-- **Branch Code:** 250655  
-
-## 📞 Contact
-
-Juan Du Plessis — juan@sofire-it.co.za — +27 671 371 638
