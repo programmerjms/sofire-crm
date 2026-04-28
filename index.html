@@ -355,7 +355,21 @@ textarea{resize:vertical;min-height:70px}
         </div>
         <div class="builder-section">
           <div class="section-title">Notes / Payment Terms</div>
-          <textarea id="inv-notes" placeholder="e.g. Payment due within 30 days..." oninput="updatePreview()"></textarea>
+          <textarea id="inv-notes" placeholder="e.g. Payment due within 30 days. Thank you for your business!" oninput="updatePreview()"></textarea>
+        </div>
+        <div class="builder-section">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div class="section-title" style="margin-bottom:0">Terms &amp; Policies</div>
+            <button class="btn btn-ghost btn-sm" onclick="resetTermsToDefault()" title="Reset to default terms">&#8635; Reset to Default</button>
+          </div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label>No Refund Policy</label>
+            <textarea id="inv-refund-policy" rows="3" oninput="updatePreview()" style="min-height:65px"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Client Obligations</label>
+            <textarea id="inv-client-obligations" rows="3" oninput="updatePreview()" style="min-height:65px"></textarea>
+          </div>
         </div>
         <div class="actions-bar">
           <button class="btn btn-ghost" onclick="saveDraft()">Save Draft</button>
@@ -450,10 +464,10 @@ textarea{resize:vertical;min-height:70px}
           <!-- POLICIES -->
           <div class="preview-policy-block">
             <div class="preview-policy-para">
-              <strong>No Refund Policy: <span id="p-policy-company">Sofire-IT Support (Juan Du Plessis Freelance)</span></strong> operates under a strict no-refund policy. Once services are completed and delivered to the client's satisfaction, no refunds will be issued under any circumstances.
+              <strong>No Refund Policy: </strong><span id="p-preview-refund"></span>
             </div>
             <div class="preview-policy-para">
-              <strong>Client Obligations:</strong> It is the responsibility of the client to provide clear instructions, feedback, and any necessary materials required for the completion of the services. Failure to do so may result in delays or additional charges, but it does not warrant a refund.
+              <strong>Client Obligations: </strong><span id="p-preview-obligations"></span>
             </div>
           </div>
 
@@ -673,6 +687,20 @@ textarea{resize:vertical;min-height:70px}
       </div>
     </div>
   </div>
+  <div class="settings-section">
+    <div class="settings-header">Default Invoice Terms &amp; Policies</div>
+    <div class="settings-body">
+      <p style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.6">These are the default terms loaded on every new invoice. You can still edit them per invoice on the <strong>New Invoice</strong> page.</p>
+      <div class="form-group" style="margin-bottom:14px">
+        <label>No Refund Policy — Default Text</label>
+        <textarea id="set-refund-policy" rows="4" style="min-height:80px"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Client Obligations — Default Text</label>
+        <textarea id="set-client-obligations" rows="4" style="min-height:80px"></textarea>
+      </div>
+    </div>
+  </div>
   <div style="display:flex;gap:10px;margin-top:4px">
     <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
     <button class="btn btn-ghost" onclick="exportData()">⬇ Export All Data</button>
@@ -852,7 +880,9 @@ let state = {
     vatRate:15, vatOnInvoices:false,
     fyStart:3,
     bkEmail:'',
-    logoData:null
+    logoData:null,
+    defaultRefundPolicy:'Sofire-IT Support (Juan Du Plessis Freelance) operates under a strict no-refund policy. Once services are completed and delivered to the client\'s satisfaction, no refunds will be issued under any circumstances.',
+    defaultClientObligations:'It is the responsibility of the client to provide clear instructions, feedback, and any necessary materials required for the completion of the services. Failure to do so may result in delays or additional charges, but it does not warrant a refund.'
   }
 };
 
@@ -906,6 +936,7 @@ function loadSettings(){
   setV('set-vat',s.vatNum);setV('set-tax-num',s.taxNum);
   setV('set-vat-rate',s.vatRate);setV('set-vat-inv',s.vatOnInvoices?'1':'0');
   setV('set-fy-start',s.fyStart);setV('set-bk-email',s.bkEmail);
+  setV('set-refund-policy',s.defaultRefundPolicy);setV('set-client-obligations',s.defaultClientObligations);
   if(s.logoData){showLogoPreview(s.logoData);}
 }
 function saveSettings(){
@@ -921,7 +952,9 @@ function saveSettings(){
     vatRate:parseFloat(gv('set-vat-rate'))||15,
     vatOnInvoices:gv('set-vat-inv')==='1',
     fyStart:parseInt(gv('set-fy-start'))||3,
-    bkEmail:gv('set-bk-email')
+    bkEmail:gv('set-bk-email'),
+    defaultRefundPolicy:gv('set-refund-policy'),
+    defaultClientObligations:gv('set-client-obligations')
   };
   save();
   updateSidebarBranding();
@@ -1065,6 +1098,9 @@ function initCreate(){
   document.getElementById('inv-due').value=due;
   document.getElementById('inv-status').value='pending';
   ['inv-cust-name','inv-cust-phone','inv-cust-email','inv-cust-addr','inv-notes'].forEach(id=>document.getElementById(id).value='');
+  const s0=state.settings;
+  document.getElementById('inv-refund-policy').value=s0.defaultRefundPolicy||'';
+  document.getElementById('inv-client-obligations').value=s0.defaultClientObligations||'';
   document.getElementById('line-items').innerHTML='';lineItemCount=0;addLineItem();
   populateCustomerSelect();updatePreview();
 }
@@ -1125,7 +1161,6 @@ function updatePreview(){
   // Company block
   document.getElementById('p-company-name').textContent=s.company||'Sofire-IT Support (Juan Du Plessis Freelance)';
   document.getElementById('p-company-detail').innerHTML=(s.phone||'+27 671 371 638')+'<br>'+(s.email||'juan@sofire-it.co.za');
-  document.getElementById('p-policy-company').textContent=s.company||'Sofire-IT Support (Juan Du Plessis Freelance)';
 
   // Logo (top-right)
   const plw=document.getElementById('p-logo-wrap');
@@ -1191,8 +1226,16 @@ function updatePreview(){
   if(vatEl){vatEl.textContent=fmtR(vatAmt);document.getElementById('p-vat-rate').textContent=s.vatRate||15;}
   document.getElementById('p-total-row').textContent=fmtR(total);
   document.getElementById('p-total').textContent=fmtR(total);
+
+  // Terms & Policies — live update in preview
+  const refund=document.getElementById('inv-refund-policy')?.value||'';
+  const obligations=document.getElementById('inv-client-obligations')?.value||'';
+  const rp=document.getElementById('p-preview-refund');
+  const op=document.getElementById('p-preview-obligations');
+  if(rp) rp.textContent=refund;
+  if(op) op.textContent=obligations;
 }
-['inv-number','inv-date','inv-due','inv-cust-name','inv-cust-phone','inv-cust-addr','inv-notes'].forEach(id=>{
+['inv-number','inv-date','inv-due','inv-cust-name','inv-cust-phone','inv-cust-addr','inv-notes','inv-refund-policy','inv-client-obligations'].forEach(id=>{
   const el=document.getElementById(id);if(el)el.addEventListener('input',updatePreview);
 });
 function collectInvoiceData(status){
@@ -1212,7 +1255,9 @@ function collectInvoiceData(status){
     custEmail:document.getElementById('inv-cust-email').value,
     custAddr:document.getElementById('inv-cust-addr').value,
     notes:document.getElementById('inv-notes').value,
-    items,subtotal,vatAmt,total
+    items,subtotal,vatAmt,total,
+    refundPolicy:document.getElementById('inv-refund-policy').value,
+    clientObligations:document.getElementById('inv-client-obligations').value
   };
 }
 function saveDraft(){const inv=collectInvoiceData('draft');upsertInvoice(inv);save();toast('Draft saved','success');}
@@ -1241,6 +1286,8 @@ function editInvoice(id){
     document.getElementById('inv-cust-email').value=inv.custEmail||'';
     document.getElementById('inv-cust-addr').value=inv.custAddr||'';
     document.getElementById('inv-notes').value=inv.notes||'';
+    document.getElementById('inv-refund-policy').value=inv.refundPolicy||state.settings.defaultRefundPolicy||'';
+    document.getElementById('inv-client-obligations').value=inv.clientObligations||state.settings.defaultClientObligations||'';
     document.getElementById('line-items').innerHTML='';lineItemCount=0;
     (inv.items||[]).forEach(it=>addLineItem(it.desc,it.price,it.qty));
     updatePreview();
@@ -1349,10 +1396,10 @@ function buildInvoiceHTML(inv,s){
     <!-- POLICIES -->
     <div style="margin-top:24px;padding-top:16px;border-top:1px solid #ebebeb">
       <p style="font-size:10px;color:#555;line-height:1.65;margin-bottom:12px">
-        <strong style="color:#1a1a1a">No Refund Policy: ${company}</strong> operates under a strict no-refund policy. Once services are completed and delivered to the client's satisfaction, no refunds will be issued under any circumstances.
+        <strong style="color:#1a1a1a">No Refund Policy: </strong>${inv.refundPolicy||s.defaultRefundPolicy||''}
       </p>
       <p style="font-size:10px;color:#555;line-height:1.65">
-        <strong style="color:#1a1a1a">Client Obligations:</strong> It is the responsibility of the client to provide clear instructions, feedback, and any necessary materials required for the completion of the services. Failure to do so may result in delays or additional charges, but it does not warrant a refund.
+        <strong style="color:#1a1a1a">Client Obligations: </strong>${inv.clientObligations||s.defaultClientObligations||''}
       </p>
     </div>
   </div>`;
@@ -1813,13 +1860,24 @@ function toast(msg,type='success'){
 }
 
 // ============================================================
+//  TERMS HELPERS
+// ============================================================
+function resetTermsToDefault(){
+  const s=state.settings;
+  document.getElementById('inv-refund-policy').value=s.defaultRefundPolicy||'';
+  document.getElementById('inv-client-obligations').value=s.defaultClientObligations||'';
+  updatePreview();
+  toast('Terms reset to defaults','success');
+}
+
+// ============================================================
 //  INIT
 // ============================================================
 load();
 // Seed if fresh
 if(state.invoices.length===0&&state.customers.length===0){
   state.customers.push({id:'seed-1',name:'Laerskool Doringkloof Primary',phone:'+27 126 671 977',email:'',addr:'https://www.dories.co.za/',notes:''});
-  state.invoices.push({id:'seed-inv-1',number:'202603845',date:'2026-03-25',due:'2026-04-25',status:'pending',custName:'Laerskool Doringkloof Primary',custPhone:'+27 126 671 977',custEmail:'',custAddr:'https://www.dories.co.za/',notes:'',items:[{desc:'Website Maintenance | Content Updates, Plugins and Theme Updates',price:1050,qty:1,amount:1050}],subtotal:1050,vatAmt:0,total:1050});
+  state.invoices.push({id:'seed-inv-1',number:'202603845',date:'2026-03-25',due:'2026-04-25',status:'pending',custName:'Laerskool Doringkloof Primary',custPhone:'+27 126 671 977',custEmail:'',custAddr:'https://www.dories.co.za/',notes:'',items:[{desc:'Website Maintenance | Content Updates, Plugins and Theme Updates',price:1050,qty:1,amount:1050}],subtotal:1050,vatAmt:0,total:1050,refundPolicy:'Sofire-IT Support (Juan Du Plessis Freelance) operates under a strict no-refund policy. Once services are completed and delivered to the client\'s satisfaction, no refunds will be issued under any circumstances.',clientObligations:'It is the responsibility of the client to provide clear instructions, feedback, and any necessary materials required for the completion of the services. Failure to do so may result in delays or additional charges, but it does not warrant a refund.'}));
   // Seed expense data to match the spreadsheet (March 2024 – Feb 2025)
   const seedMonths=[{m:'2024-03',total:12865.80},{m:'2024-04',total:12511.48},{m:'2024-05',total:40053.94},{m:'2024-06',total:25759.52},{m:'2024-07',total:25725.93},{m:'2024-08',total:29890.38},{m:'2024-09',total:32881.76},{m:'2024-10',total:28682.17},{m:'2024-11',total:32021.50},{m:'2024-12',total:30995.46},{m:'2025-01',total:31716.07},{m:'2025-02',total:28220.19}];
   const seedExpCats=['Bank Charges','Motor Vehicle – Petrol','Wifi / Internet','Laptop / Monitor','House Rent (home office)','Insurance','Cellphone','Vehicle Instalment','Hosting','Microsoft Software','Electricity'];
