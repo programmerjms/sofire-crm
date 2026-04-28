@@ -2051,18 +2051,26 @@ function selectDashFY(fy){
 
 // SARS 2025/2026 tax brackets (individual)
 function calcSARSTax(income){
-  if(income<=95750)return 0;
+  // SARS 2025/2026 individual tax brackets
+  // Format: [upper limit, base tax at bottom of this band, marginal rate]
+  // Base values are cumulative tax on income exactly at the lower limit of each band
+  if(income<=0) return 0;
   const brackets=[
-    [237100,0.18,0],[370500,42678,0.26],[512800,77362,0.31],
-    [673000,127094,0.36],[857900,204732,0.39],[1817000,577100,0.41],[Infinity,970688,0.45]
+    [237100,       0,      0.18],  // 18% from R1
+    [370500,   42678,      0.26],  // R42,678 + 26% above R237,100
+    [512800,   77362,      0.31],  // R77,362 + 31% above R370,500
+    [673000,  121475,      0.36],  // R121,475 + 36% above R512,800
+    [857900,  179147,      0.39],  // R179,147 + 39% above R673,000
+    [1817000, 251258,      0.41],  // R251,258 + 41% above R857,900
+    [Infinity,644489,      0.45],  // R644,489 + 45% above R1,817,000
   ];
-  let prev=95750,tax=0;
+  let prev=0, tax=0;
   for(const [limit,base,rate] of brackets){
-    if(income<=limit){tax=base+(income-prev)*rate;break;}
+    if(income<=limit){tax=base+(income-prev)*rate; break;}
     prev=limit;
   }
-  const rebate=17235;// primary rebate 2025/2026
-  return Math.max(0,tax-rebate);
+  const primaryRebate=17235; // 2025/2026 primary rebate
+  return Math.max(0, tax-primaryRebate);
 }
 
 // ============================================================
