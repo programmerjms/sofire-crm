@@ -1131,13 +1131,35 @@ textarea{resize:vertical;min-height:70px}
               <!-- PROVISIONAL TAX — the key section -->
               <div style="background:var(--surface);border-radius:8px;overflow:hidden;margin-bottom:10px">
                 <div style="padding:8px 13px;background:var(--surface3);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace">Provisional Tax Payments (End Feb &amp; End July)</div>
+                <!-- Income -->
                 <div style="padding:9px 13px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;font-size:12px">
                   <span style="color:var(--text2)" id="ptax-proj-label">Projected Annual Income</span>
                   <span style="font-family:'DM Mono',monospace;color:var(--text)" id="ptax-proj-income">R0</span>
                 </div>
+                <!-- Expense deduction -->
                 <div style="padding:9px 13px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;font-size:12px">
-                  <span style="color:var(--text2)">Estimated Total Annual Tax</span>
+                  <span style="color:var(--text2)" id="ptax-exp-label">Less: Business Expenses (YTD)</span>
+                  <span style="font-family:'DM Mono',monospace;color:var(--green)" id="ptax-exp-deduction">−R0</span>
+                </div>
+                <!-- Projected expenses -->
+                <div style="padding:9px 13px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;font-size:12px">
+                  <span style="color:var(--text2)" id="ptax-projexp-label">Projected Annual Expenses</span>
+                  <span style="font-family:'DM Mono',monospace;color:var(--green)" id="ptax-proj-expenses">−R0</span>
+                </div>
+                <!-- Taxable income -->
+                <div style="padding:9px 13px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;font-size:12px;font-weight:600">
+                  <span style="color:var(--text)">Taxable Income (after expenses)</span>
+                  <span style="font-family:'DM Mono',monospace;color:var(--blue)" id="ptax-taxable-income">R0</span>
+                </div>
+                <!-- Tax on taxable income -->
+                <div style="padding:9px 13px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;font-size:12px">
+                  <span style="color:var(--text2)">Estimated Annual Tax on Taxable Income</span>
                   <span style="font-family:'DM Mono',monospace;color:var(--yellow)" id="ptax-proj-tax">R0</span>
+                </div>
+                <!-- Tax saving -->
+                <div style="padding:9px 13px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;font-size:12px">
+                  <span style="color:var(--text2)">Tax Saving from Expenses</span>
+                  <span style="font-family:'DM Mono',monospace;color:var(--green)" id="ptax-tax-saving">R0</span>
                 </div>
                 <div style="padding:9px 13px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;font-size:12px">
                   <span style="color:var(--text2)">Already Paid to SARS (YTD)</span>
@@ -2981,7 +3003,8 @@ function calcSalaryTax(){
   if(!gross||gross<=0){
     ['ptax-monthly-gross','ptax-d-paye','ptax-net','ptax-ytd-income','ptax-annual-gross',
      'ptax-annual-tax','ptax-ytd-owed','ptax-ytd-paid','ptax-ytd-balance',
-     'ptax-proj-income','ptax-proj-tax','ptax-already-paid','ptax-still-owed',
+     'ptax-proj-income','ptax-proj-expenses','ptax-exp-deduction','ptax-taxable-income',
+     'ptax-proj-tax','ptax-tax-saving','ptax-already-paid','ptax-still-owed',
      'ptax-p1-amount','ptax-p2-amount'].forEach(id=>set(id,'R0'));
     const m=document.getElementById('ptax-status-msg'); if(m) m.style.display='none';
     const s=document.getElementById('ptax-suggest-row'); if(s) s.style.display='none';
@@ -3020,26 +3043,51 @@ function calcSalaryTax(){
   // ── STEP 2: Full-year tax on annualised rate
   const annualisedAnnualTax = calcSARSTax(annualisedRate);
 
-  // ── STEP 3: YTD tax owed = proportional share of annual tax
-  // (this is what SARS would say you owe for the months gone)
-  const ytdTaxOwed = annualisedAnnualTax * (monthsGone / 12);
-  const ytdBalance = ytdTaxPaid - ytdTaxOwed;
+  // ── STEP 3 & 4 calculations now after expenses loaded below
 
-  // ── STEP 4: Project full year using rolling average for remaining months
-  // Use last 3 entries as rolling average for future months
-  const recentAmounts = [...fyPrev.slice(-2).map(p=>parseFloat(p.amount||0)), gross];
-  const rollingAvg    = recentAmounts.reduce((a,v)=>a+v,0) / recentAmounts.length;
+  // ── STEP 4: Project full year income using rolling average for remaining months
+  const recentAmounts   = [...fyPrev.slice(-2).map(p=>parseFloat(p.amount||0)), gross];
+  const rollingAvg      = recentAmounts.reduce((a,v)=>a+v,0) / recentAmounts.length;
   const projectedAnnual = ytdIncome + (rollingAvg * monthsLeft);
 
-  // ── STEP 5: Estimated total annual tax on projected income
-  const projectedAnnualTax = calcSARSTax(projectedAnnual);
+  // ── STEP 5: Pull actual YTD business expenses for this FY
+  const fyExpenses = state.expenses.filter(e=>{
+    const d=new Date(e.date);
+    return d>=fyStartDate && d<fyEndDate;
+  });
+  const ytdExpenses = fyExpenses.reduce((a,e)=>a+parseFloat(e.amount||0),0);
+  // Also pull any tax payments already recorded for this FY
+  const fyTaxPayments = (state.taxPayments||[])
+    .filter(tp=>tp.fy===String(fyYear))
+    .reduce((a,tp)=>a+parseFloat(tp.amount||0),0);
 
-  // ── STEP 6: Provisional payment amounts
-  // SARS provisional tax: 2 payments
-  // 1st payment (end July): 50% of estimated annual tax − already paid
-  // 2nd payment (end Feb):  remaining balance
-  // The monthly "set aside" = projected annual tax ÷ 12
-  const alreadyPaidToSARS = ytdTaxPaid; // from salary tax payments
+  // Project annual expenses using same rolling-average approach as income
+  // (months gone / 12 = expense run rate; scale to full year)
+  const projectedAnnualExpenses = monthsGone > 0
+    ? (ytdExpenses / monthsGone) * 12
+    : 0;
+
+  // ── STEP 6: Taxable income = projected income − projected expenses
+  // This is what SARS actually taxes you on as a provisional taxpayer
+  const projectedTaxableIncome = Math.max(0, projectedAnnual - projectedAnnualExpenses);
+  const ytdTaxableIncome       = Math.max(0, ytdIncome - ytdExpenses);
+
+  // Annualised taxable income (for YTD tax owed calculation)
+  const annualisedTaxableRate  = Math.max(0, annualisedRate - projectedAnnualExpenses);
+
+  // ── STEP 7: Tax on TAXABLE income (after expenses deducted)
+  const projectedAnnualTax     = calcSARSTax(projectedTaxableIncome);
+  const taxWithoutExpenses     = calcSARSTax(projectedAnnual);   // what you'd pay without deductions
+  const taxSavingFromExpenses  = Math.max(0, taxWithoutExpenses - projectedAnnualTax);
+
+  // Update YTD tax owed to use taxable income too
+  const annualisedTaxOnTaxable = calcSARSTax(annualisedTaxableRate);
+  const ytdTaxOwed             = annualisedTaxOnTaxable * (monthsGone / 12);
+  const ytdBalance             = ytdTaxPaid - ytdTaxOwed;
+
+  // ── STEP 8: Provisional payment amounts
+  // Include any separately recorded SARS tax payments as credits
+  const alreadyPaidToSARS = ytdTaxPaid + fyTaxPayments;
   const totalStillOwed    = Math.max(0, projectedAnnualTax - alreadyPaidToSARS);
 
   // Work out which payment we're heading toward
@@ -3053,7 +3101,7 @@ function calcSalaryTax(){
 
   const p1Amount = Math.max(0, projectedAnnualTax/2 - alreadyPaidToSARS);
   const p2Amount = Math.max(0, projectedAnnualTax   - alreadyPaidToSARS - Math.max(0,projectedAnnualTax/2));
-  const monthlySetAside = projectedAnnualTax / 12;
+  const monthlySetAside = projectedAnnualTax / 12;  // based on taxable income after expenses
 
   // ── Update display
   set('ptax-monthly-gross', fmt(gross));
@@ -3064,12 +3112,20 @@ function calcSalaryTax(){
   set('ptax-annual-tax',    fmt(annualisedAnnualTax));
   set('ptax-ytd-owed',      fmt(ytdTaxOwed));
   set('ptax-ytd-paid',      fmt(ytdTaxPaid));
-  set('ptax-proj-income',   fmt(projectedAnnual));
-  set('ptax-proj-tax',      fmt(projectedAnnualTax));
-  set('ptax-already-paid',  fmt(alreadyPaidToSARS));
-  set('ptax-still-owed',    fmt(totalStillOwed));
-  set('ptax-p1-amount',     fmt(p1Amount));
-  set('ptax-p2-amount',     fmt(p2Amount));
+  set('ptax-proj-income',      fmt(projectedAnnual));
+  set('ptax-exp-deduction',    '−'+fmt(ytdExpenses)+(ytdExpenses>0?' (YTD actual)':''));
+  set('ptax-proj-expenses',    '−'+fmt(projectedAnnualExpenses));
+  set('ptax-taxable-income',   fmt(projectedTaxableIncome));
+  set('ptax-proj-tax',         fmt(projectedAnnualTax));
+  set('ptax-tax-saving',       taxSavingFromExpenses>0 ? '−'+fmt(taxSavingFromExpenses)+' saved' : 'R0 (no expenses yet)');
+  set('ptax-already-paid',     fmt(alreadyPaidToSARS));
+  set('ptax-still-owed',       fmt(totalStillOwed));
+  set('ptax-p1-amount',        fmt(p1Amount));
+  set('ptax-p2-amount',        fmt(p2Amount));
+
+  // Colour the tax saving green only when there's something to show
+  const savingEl=document.getElementById('ptax-tax-saving');
+  if(savingEl) savingEl.style.color=taxSavingFromExpenses>0?'var(--green)':'var(--text3)';
 
   // Dynamic labels
   const sub=document.getElementById('ptax-panel-subtitle');
@@ -3082,7 +3138,11 @@ function calcSalaryTax(){
   if(owedLbl) owedLbl.textContent=`Tax Owed for ${monthsGone} Months (${fmt(annualisedRate)}/yr × ${monthsGone}/12)`;
 
   const projLbl=document.getElementById('ptax-proj-label');
-  if(projLbl) projLbl.textContent=`Projected Annual (YTD + ${fmt(rollingAvg)}/mo × ${monthsLeft} months)`;
+  if(projLbl) projLbl.textContent=`Projected Annual Income (${ytdCount} months actual + ${fmt(rollingAvg)}/mo avg)`;
+  const expLbl=document.getElementById('ptax-exp-label');
+  if(expLbl) expLbl.textContent=`Less: Business Expenses YTD (${fyExpenses.length} entries recorded)`;
+  const projExpLbl=document.getElementById('ptax-projexp-label');
+  if(projExpLbl) projExpLbl.textContent=`Projected Annual Expenses (${fmt(ytdExpenses/Math.max(1,monthsGone))}/mo × 12)`;
 
   const p1Lbl=document.getElementById('ptax-p1-label');
   const p2Lbl=document.getElementById('ptax-p2-label');
@@ -3125,8 +3185,7 @@ function calcSalaryTax(){
     suggestEl.style.display='block';
     suggestAmt.textContent=fmt(monthlySetAside);
     const nextPay=headingToJuly?`1st provisional (end July): ${fmt(p1Amount)}`:`2nd provisional (end Feb): ${fmt(p2Amount)}`;
-    const monthsTillNext=headingToJuly ? Math.max(1,julyCutoff-(now.getMonth()+1)) : (now.getMonth()+1<=2?Math.max(1,2-(now.getMonth()+1)):Math.max(1,14-(now.getMonth()+1)));
-    suggestNote.textContent=`${fmt(projectedAnnualTax)} est. annual tax ÷ 12 months. Next payment: ${nextPay}.`;
+    suggestNote.textContent=`Based on ${fmt(projectedTaxableIncome)} taxable income (${fmt(projectedAnnual)} income − ${fmt(projectedAnnualExpenses)} expenses). Tax: ${fmt(projectedAnnualTax)}/yr. Next: ${nextPay}.`;
     suggestEl.style.borderLeftColor= totalStillOwed>0 ? 'var(--accent)' : 'var(--green)';
   }
 
@@ -3134,16 +3193,19 @@ function calcSalaryTax(){
   const msgEl=document.getElementById('ptax-status-msg');
   if(msgEl){
     msgEl.style.display='block';
+    const expNote = ytdExpenses>0
+      ? ` After deducting ${fmt(projectedAnnualExpenses)} projected expenses, your taxable income is ${fmt(projectedTaxableIncome)} — saving ${fmt(taxSavingFromExpenses)} in tax.`
+      : ' Add your business expenses in the Expenses page to reduce your taxable income.';
     if(ytdBalance >= -50){
       msgEl.style.background='rgba(45,218,140,.08)';
       msgEl.style.border='1px solid rgba(45,218,140,.2)';
       msgEl.style.color='var(--green)';
-      msgEl.textContent=`✓ You are ${fmt(Math.abs(ytdBalance))} ${ytdBalance>=0?'ahead of':'on'} your provisional tax. Your ${ytdCount} months of income (${fmt(ytdIncome)}) annualises to ${fmt(annualisedRate)}/year.`;
+      msgEl.textContent=`✓ You are ${fmt(Math.abs(ytdBalance))} ${ytdBalance>=0?'ahead of schedule on':'on track for'} your provisional tax.${expNote}`;
     } else {
       msgEl.style.background='rgba(255,60,60,.08)';
       msgEl.style.border='1px solid rgba(255,60,60,.15)';
       msgEl.style.color='var(--accent)';
-      msgEl.textContent=`⚠ You are behind by ${fmt(Math.abs(ytdBalance))}. Your ${ytdCount} months of income (${fmt(ytdIncome)}) annualises to ${fmt(annualisedRate)}/year, requiring ${fmt(ytdTaxOwed)} for the ${monthsGone} months so far. You have paid ${fmt(ytdTaxPaid)}.`;
+      msgEl.textContent=`⚠ You are behind by ${fmt(Math.abs(ytdBalance))} for this year so far. Your taxable income after ${fmt(projectedAnnualExpenses)} expenses is ${fmt(projectedTaxableIncome)}/year.${expNote}`;
     }
   }
 }
