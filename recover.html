@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sofire-IT CRM — Data Recovery</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0a0f;--surface:#13131a;--surface2:#1c1c27;--border:#2a2a3d;--accent:#ff3c3c;--green:#2dda8c;--yellow:#ffc24a;--blue:#4a9eff;--text:#f0f0f5;--text2:#9090a8;--text3:#5a5a72}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:620px;max-width:100%;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,.6)}
+.header{background:linear-gradient(135deg,#13131a,#1c1c27);padding:28px 32px;border-bottom:1px solid var(--border)}
+.title{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:4px}
+.sub{font-size:12px;color:var(--text3);font-family:'DM Mono',monospace;letter-spacing:1px;text-transform:uppercase}
+.body{padding:28px 32px}
+.step{margin-bottom:20px}
+.step-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace;margin-bottom:8px}
+.status-box{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;font-size:13px;line-height:1.8}
+.status-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(42,42,61,.5)}
+.status-row:last-child{border-bottom:none}
+.key{font-family:'DM Mono',monospace;font-size:11px;color:var(--text2)}
+.val{font-size:12px;font-weight:500}
+.found{color:var(--green)}
+.missing{color:var(--text3)}
+.warn{color:var(--yellow)}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:11px 20px;border-radius:8px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;transition:all .15s;width:100%;justify-content:center;margin-top:10px}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#e03030;transform:translateY(-1px)}
+.btn-green{background:var(--green);color:#0a0a0f}
+.btn-green:hover{opacity:.85}
+.btn-ghost{background:var(--surface2);color:var(--text2);border:1px solid var(--border)}
+.btn-ghost:hover{background:var(--border);color:var(--text)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.log{background:#0a0a0f;border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-family:'DM Mono',monospace;font-size:11px;color:var(--text2);max-height:180px;overflow-y:auto;margin-top:10px;line-height:1.8}
+.log .ok{color:var(--green)}
+.log .err{color:var(--accent)}
+.log .info{color:var(--blue)}
+.log .warn{color:var(--yellow)}
+.divider{height:1px;background:var(--border);margin:20px 0}
+.summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.summary-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;text-align:center}
+.summary-num{font-family:'Syne',sans-serif;font-size:24px;font-weight:700;margin-bottom:2px}
+.summary-lbl{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="header">
+    <div class="title">🔍 CRM Data Recovery</div>
+    <div class="sub">Sofire-IT Support — Restore Lost Data</div>
+  </div>
+  <div class="body">
+
+    <div class="step">
+      <div class="step-label">Step 1 — Scan for your data</div>
+      <div class="status-box" id="scan-results">
+        <div style="color:var(--text3);font-size:12px">Click "Scan" to check all possible storage locations...</div>
+      </div>
+      <button class="btn btn-ghost" onclick="scanStorage()" style="margin-top:10px">🔎 Scan localStorage</button>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="step">
+      <div class="step-label">Step 2 — Recover & Merge</div>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.7">
+        This will find your invoices, customers, payments, expenses, logo, and settings from
+        the old storage key (<code style="color:var(--yellow)">sofire_crm</code>) and merge them
+        into the current app (<code style="color:var(--yellow)">sofire_crm2</code>).
+        Your existing data is <strong>never overwritten</strong> — only missing items are added back.
+      </p>
+      <button class="btn btn-primary" id="recover-btn" onclick="recoverData()" disabled>⬆ Recover My Data</button>
+      <div class="log" id="log" style="display:none"></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="step" id="success-step" style="display:none">
+      <div class="step-label">Recovery Complete ✓</div>
+      <div id="summary-cards" class="summary-grid"></div>
+      <button class="btn btn-green" onclick="goToCRM()" style="margin-top:16px">→ Open CRM</button>
+    </div>
+
+    <div class="step" id="manual-step" style="display:none">
+      <div class="step-label">Manual Restore from Backup File</div>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.7">
+        If you exported a backup JSON file previously, you can restore from it here.
+      </p>
+      <input type="file" id="backup-file" accept=".json" style="display:none" onchange="restoreFromFile(this)">
+      <button class="btn btn-ghost" onclick="document.getElementById('backup-file').click()">📂 Open Backup File (.json)</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const KEYS_TO_CHECK = [
+  'sofire_crm',       // original v1 key
+  'sofire_crm2',      // current v2 key
+  'sofire-crm',       // hyphen variant
+  'sofire_data',      // possible alt
+  'crm_data',         // possible alt
+];
+
+let scanResults = {};
+let foundOldData = null;
+
+function log(msg, type='info') {
+  const el = document.getElementById('log');
+  el.style.display = 'block';
+  const line = document.createElement('div');
+  line.className = type;
+  line.textContent = new Date().toLocaleTimeString() + '  ' + msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function parseKey(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    return d;
+  } catch(e) { return null; }
+}
+
+function countItems(data) {
+  return {
+    invoices:  (data.invoices  || []).length,
+    customers: (data.customers || []).length,
+    payments:  (data.payments  || []).length,
+    expenses:  (data.expenses  || []).length,
+    hasLogo:   !!(data.settings && data.settings.logoData),
+    hasSettings: !!data.settings,
+  };
+}
+
+function scanStorage() {
+  const box = document.getElementById('scan-results');
+  box.innerHTML = '';
+  scanResults = {};
+  foundOldData = null;
+
+  // Also scan ALL keys in localStorage
+  const allKeys = [...new Set([...KEYS_TO_CHECK, ...Object.keys(localStorage)])];
+
+  let anyFound = false;
+
+  allKeys.forEach(key => {
+    if (key.startsWith('sofire_session') || key.startsWith('sofire_credentials') || key.startsWith('sofire_share')) return;
+    const data = parseKey(key);
+    if (!data || typeof data !== 'object') return;
+    if (!data.invoices && !data.customers && !data.expenses && !data.payments && !data.settings) return;
+
+    const counts = countItems(data);
+    scanResults[key] = { data, counts };
+
+    const row = document.createElement('div');
+    row.className = 'status-row';
+    const hasUsefulData = counts.invoices > 0 || counts.customers > 0 || counts.expenses > 0 || counts.payments > 0 || counts.hasLogo;
+    row.innerHTML = `
+      <span class="key">${key}</span>
+      <span class="val ${hasUsefulData ? 'found' : 'missing'}">
+        ${counts.invoices} invoices · ${counts.customers} customers ·
+        ${counts.payments} payments · ${counts.expenses} expenses
+        ${counts.hasLogo ? ' · 🖼 logo' : ''}
+      </span>`;
+    box.appendChild(row);
+    anyFound = true;
+
+    // Pick the old key with the most data as source for recovery
+    if (key !== 'sofire_crm2' && hasUsefulData) {
+      if (!foundOldData || counts.invoices + counts.customers + counts.payments + counts.expenses >
+          countItems(foundOldData).invoices + countItems(foundOldData).customers) {
+        foundOldData = data;
+      }
+    }
+  });
+
+  if (!anyFound) {
+    box.innerHTML = '<div class="missing" style="font-size:12px">No CRM data found in localStorage. Try restoring from a backup file below.</div>';
+    document.getElementById('manual-step').style.display = 'block';
+  } else {
+    const btn = document.getElementById('recover-btn');
+    btn.disabled = !foundOldData;
+    if (foundOldData) {
+      btn.textContent = '⬆ Recover My Data';
+    } else {
+      btn.textContent = 'Already on current key — no recovery needed';
+      document.getElementById('manual-step').style.display = 'block';
+    }
+  }
+}
+
+function mergeData(source, target) {
+  const result = JSON.parse(JSON.stringify(target)); // deep clone current
+  let added = { invoices:0, customers:0, payments:0, expenses:0 };
+
+  const existingIds = {
+    invoices:  new Set((result.invoices  || []).map(i => i.id)),
+    customers: new Set((result.customers || []).map(c => c.id)),
+    payments:  new Set((result.payments  || []).map(p => p.id)),
+    expenses:  new Set((result.expenses  || []).map(e => e.id)),
+  };
+
+  // Merge each collection
+  ['invoices','customers','payments','expenses'].forEach(col => {
+    if (!result[col]) result[col] = [];
+    (source[col] || []).forEach(item => {
+      if (!existingIds[col].has(item.id)) {
+        result[col].push(item);
+        added[col]++;
+      }
+    });
+  });
+
+  // Restore settings that are missing/empty in current
+  if (source.settings && result.settings) {
+    // Logo
+    if (!result.settings.logoData && source.settings.logoData) {
+      result.settings.logoData = source.settings.logoData;
+      log('✓ Logo restored', 'ok');
+    }
+    // Company details
+    const fields = ['company','tagline','owner','phone','email','website','address',
+                    'bank','accHolder','accNum','branch','accType','bkEmail',
+                    'defaultRefundPolicy','defaultClientObligations'];
+    fields.forEach(f => {
+      if (!result.settings[f] && source.settings[f]) {
+        result.settings[f] = source.settings[f];
+        log(`✓ Setting restored: ${f}`, 'ok');
+      }
+    });
+  } else if (source.settings && !result.settings) {
+    result.settings = source.settings;
+    log('✓ All settings restored', 'ok');
+  }
+
+  // Restore nextInvNum if current is lower
+  if (source.nextInvNum && (!result.nextInvNum || source.nextInvNum > result.nextInvNum)) {
+    result.nextInvNum = source.nextInvNum;
+    log(`✓ Invoice counter restored: ${source.nextInvNum}`, 'ok');
+  }
+
+  return { result, added };
+}
+
+function recoverData() {
+  if (!foundOldData) { log('No old data found to recover', 'err'); return; }
+
+  log('Starting recovery...', 'info');
+
+  // Get current data
+  let currentData = parseKey('sofire_crm2') || {
+    invoices:[], customers:[], payments:[], expenses:[],
+    settings:{}, nextInvNum: 202603846
+  };
+
+  log(`Current data: ${(currentData.invoices||[]).length} invoices, ${(currentData.customers||[]).length} customers`, 'info');
+  log(`Source data: ${(foundOldData.invoices||[]).length} invoices, ${(foundOldData.customers||[]).length} customers`, 'info');
+
+  const { result, added } = mergeData(foundOldData, currentData);
+
+  log(`Added: ${added.invoices} invoices, ${added.customers} customers, ${added.payments} payments, ${added.expenses} expenses`, 'ok');
+
+  // Save merged data
+  try {
+    localStorage.setItem('sofire_crm2', JSON.stringify(result));
+    log('✓ Data saved to sofire_crm2', 'ok');
+  } catch(e) {
+    log('✗ Save failed: ' + e.message, 'err');
+    return;
+  }
+
+  // Show success
+  document.getElementById('success-step').style.display = 'block';
+  const counts = countItems(result);
+  document.getElementById('summary-cards').innerHTML = `
+    <div class="summary-card">
+      <div class="summary-num" style="color:var(--accent)">${counts.invoices}</div>
+      <div class="summary-lbl">Invoices</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-num" style="color:var(--blue)">${counts.customers}</div>
+      <div class="summary-lbl">Customers</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-num" style="color:var(--green)">${counts.payments}</div>
+      <div class="summary-lbl">Payments</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-num" style="color:var(--yellow)">${counts.expenses}</div>
+      <div class="summary-lbl">Expenses</div>
+    </div>`;
+
+  log('✓ Recovery complete!', 'ok');
+  document.getElementById('manual-step').style.display = 'block';
+}
+
+function goToCRM() {
+  window.location.href = 'index.html';
+}
+
+function restoreFromFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const source = JSON.parse(e.target.result);
+      if (!source.invoices && !source.customers && !source.expenses) {
+        log('✗ Not a valid CRM backup file', 'err'); return;
+      }
+      log(`Backup file: ${(source.invoices||[]).length} invoices, ${(source.customers||[]).length} customers`, 'info');
+      let current = parseKey('sofire_crm2') || { invoices:[], customers:[], payments:[], expenses:[], settings:{}, nextInvNum:202603846 };
+      const { result, added } = mergeData(source, current);
+      localStorage.setItem('sofire_crm2', JSON.stringify(result));
+      log(`✓ Restored from backup: +${added.invoices} invoices, +${added.customers} customers, +${added.payments} payments, +${added.expenses} expenses`, 'ok');
+      document.getElementById('log').style.display = 'block';
+      const counts = countItems(result);
+      document.getElementById('success-step').style.display = 'block';
+      document.getElementById('summary-cards').innerHTML = `
+        <div class="summary-card"><div class="summary-num" style="color:var(--accent)">${counts.invoices}</div><div class="summary-lbl">Invoices</div></div>
+        <div class="summary-card"><div class="summary-num" style="color:var(--blue)">${counts.customers}</div><div class="summary-lbl">Customers</div></div>
+        <div class="summary-card"><div class="summary-num" style="color:var(--green)">${counts.payments}</div><div class="summary-lbl">Payments</div></div>
+        <div class="summary-card"><div class="summary-num" style="color:var(--yellow)">${counts.expenses}</div><div class="summary-lbl">Expenses</div></div>`;
+    } catch(err) {
+      log('✗ Failed to parse backup: ' + err.message, 'err');
+    }
+  };
+  reader.readAsText(file);
+}
+
+// Auto-scan on load
+window.addEventListener('load', () => setTimeout(scanStorage, 300));
+</script>
+</body>
+</html>
