@@ -359,7 +359,7 @@ textarea{resize:vertical;min-height:70px}
           <div class="tax-row"><span class="tax-label">Total Expenses</span><span class="tax-val" id="tax-exp">R0</span></div>
           <div class="tax-row highlight"><span class="tax-label">Taxable Income</span><span class="tax-val" id="tax-taxable">R0</span></div>
           <div class="tax-row"><span class="tax-label">Est. Income Tax (SARS)</span><span class="tax-val" id="tax-sars">R0</span></div>
-          <div class="tax-row"><span class="tax-label">VAT Collected (15%)</span><span class="tax-val" id="tax-vat">R0</span></div>
+
           <div style="margin-top:10px"><button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center" onclick="nav('expenses')">View Full Tax Report</button></div>
         </div>
       </div>
@@ -507,10 +507,7 @@ textarea{resize:vertical;min-height:70px}
                 <td colspan="3" style="text-align:right;color:#555">Subtotal</td>
                 <td style="text-align:right;font-weight:600" id="p-subtotal">R0.00</td>
               </tr>
-              <tr id="p-vat-row" class="total-row" style="display:none">
-                <td colspan="3" style="text-align:right;color:#555">VAT (<span id="p-vat-rate">15</span>%)</td>
-                <td style="text-align:right;font-weight:600" id="p-vat">R0.00</td>
-              </tr>
+
               <tr class="total-row">
                 <td colspan="3" style="text-align:right;color:#555">Total</td>
                 <td style="text-align:right;font-weight:600" id="p-total-row">R0.00</td>
@@ -568,8 +565,8 @@ textarea{resize:vertical;min-height:70px}
     <div class="card-header"><span class="card-title">Income History</span></div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Date</th><th>Type</th><th>Source / Invoice</th><th>Gross Amount</th><th>PAYE</th><th>Net</th><th>Method</th><th>Proof</th></tr></thead>
-        <tbody id="payments-tbody"><tr><td colspan="8"><div class="empty-state"><div class="empty-icon">💳</div><div class="empty-text">No income recorded yet</div></div></td></tr></tbody>
+        <thead><tr><th>Date</th><th>Type</th><th>Source / Invoice</th><th>Gross Amount</th><th>PAYE</th><th>Net</th><th>Method</th><th>Proof</th><th>Actions</th></tr></thead>
+        <tbody id="payments-tbody"><tr><td colspan="9"><div class="empty-state"><div class="empty-icon">💳</div><div class="empty-text">No income recorded yet</div></div></td></tr></tbody>
       </table>
     </div>
   </div>
@@ -643,7 +640,7 @@ textarea{resize:vertical;min-height:70px}
         </select>
       </div>
     </div>
-    <div style="padding:18px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px">
+    <div style="padding:18px;display:grid;grid-template-columns:1fr 1fr;gap:18px">
       <div>
         <div style="font-size:11px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace">Income</div>
         <div class="tax-row"><span class="tax-label">Gross Revenue</span><span class="tax-val" id="tx-gross">R0</span></div>
@@ -656,12 +653,7 @@ textarea{resize:vertical;min-height:70px}
         <div class="tax-row"><span class="tax-label">Effective Rate</span><span class="tax-val" id="tx-eff-rate">0%</span></div>
         <div class="tax-row"><span class="tax-label">Provisional Tax (×2)</span><span class="tax-val" id="tx-prov">R0</span></div>
       </div>
-      <div>
-        <div style="font-size:11px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace">VAT (if registered)</div>
-        <div class="tax-row"><span class="tax-label">Output VAT (15%)</span><span class="tax-val" id="tx-vat-out">R0</span></div>
-        <div class="tax-row"><span class="tax-label">Input VAT (expenses)</span><span class="tax-val" id="tx-vat-in">R0</span></div>
-        <div class="tax-row highlight"><span class="tax-label">VAT Payable</span><span class="tax-val" id="tx-vat-pay">R0</span></div>
-      </div>
+
     </div>
     <div style="padding:0 18px 14px;font-size:11px;color:var(--text3)">⚠ Estimates based on 2025/2026 SARS individual tax brackets. Consult your bookkeeper for official returns.</div>
   </div>
@@ -775,12 +767,9 @@ textarea{resize:vertical;min-height:70px}
     <div class="settings-header">Tax Settings</div>
     <div class="settings-body">
       <div class="form-grid">
-        <div class="form-group"><label>VAT Number (if registered)</label><input type="text" id="set-vat" placeholder="4xxxxxxxxx"></div>
+
         <div class="form-group"><label>Income Tax Number</label><input type="text" id="set-tax-num" placeholder="XXXXXXXXX"></div>
-        <div class="form-group"><label>VAT Rate (%)</label><input type="number" id="set-vat-rate" value="15"></div>
-        <div class="form-group"><label>Include VAT on Invoices?</label>
-          <select id="set-vat-inv"><option value="0">No (ex-VAT prices)</option><option value="1">Yes (add VAT to totals)</option></select>
-        </div>
+
         <div class="form-group"><label>Financial Year Start</label>
           <select id="set-fy-start"><option value="3">March (SA default)</option><option value="1">January</option></select>
         </div>
@@ -1177,20 +1166,45 @@ function generateShareLink() {
 function createShareLink() {
   const fy = document.getElementById('share-fy-select').value;
   const expiry = parseInt(document.getElementById('share-expiry').value);
-  // Generate a random 32-char token
-  const token = [...crypto.getRandomValues(new Uint8Array(24))].map(x => x.toString(16).padStart(2,'0')).join('');
   const expiresAt = expiry > 0 ? Date.now() + expiry * 86400000 : 0;
-  // Store token in localStorage
-  const tokens = JSON.parse(localStorage.getItem('sofire_share_tokens') || '{}');
-  tokens[token] = { type: 'expenses', fy, expiresAt, created: Date.now() };
-  localStorage.setItem('sofire_share_tokens', JSON.stringify(tokens));
-  // Build the share URL
-  const url = `${window.location.origin}${window.location.pathname}?share=expenses&token=${token}&fy=${fy}`;
+
+  // Build the FY date range
+  const fyStart = state.settings.fyStart || 3;
+  const fyYear = parseInt(fy);
+  const fyStartDate = new Date(`${fyYear-1}-${String(fyStart).padStart(2,'0')}-01`);
+  const fyEndDate   = new Date(`${fyYear}-${String(fyStart).padStart(2,'0')}-01`);
+
+  // Collect only the data needed for the report — embed directly in URL
+  const s = state.settings;
+  const exps = state.expenses
+    .filter(e => { const d = new Date(e.date); return d >= fyStartDate && d < fyEndDate; })
+    .map(e => ({ date: e.date, category: e.category, desc: e.desc, amount: e.amount, method: e.method || '' }));
+  const payments = state.payments
+    .filter(p => { const d = new Date(p.date); return d >= fyStartDate && d < fyEndDate; })
+    .map(p => ({ amount: p.amount, date: p.date }));
+
+  const payload = {
+    type: 'expenses',
+    fy,
+    expiresAt,
+    company: s.company || 'Sofire-IT Support',
+    owner: s.owner || 'Juan Du Plessis',
+    logoData: s.logoData || null,
+    fyStart,
+    exps,
+    payments,
+    created: Date.now()
+  };
+
+  // Encode as base64 — works across all browsers and devices
+  const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+  const url = `${window.location.origin}${window.location.pathname}?share=expenses&data=${encoded}`;
+
   document.getElementById('share-link-input').value = url;
   document.getElementById('share-link-wrap').style.display = '';
   document.getElementById('share-expiry-note').textContent = expiry > 0
-    ? `This link expires on ${new Date(expiresAt).toLocaleDateString('en-ZA', {day:'numeric',month:'long',year:'numeric'})}`
-    : 'This link never expires.';
+    ? `Expires on ${new Date(expiresAt).toLocaleDateString('en-ZA', {day:'numeric',month:'long',year:'numeric'})} · ${exps.length} expense entries included`
+    : `Never expires · ${exps.length} expense entries included`;
 }
 
 function copyShareLink() {
@@ -1198,63 +1212,69 @@ function copyShareLink() {
   navigator.clipboard.writeText(input.value).then(() => toast('Link copied ✓', 'success'));
 }
 
-function validateShareToken(token) {
-  const tokens = JSON.parse(localStorage.getItem('sofire_share_tokens') || '{}');
-  const t = tokens[token];
-  if (!t) return null;
-  if (t.expiresAt > 0 && Date.now() > t.expiresAt) return null; // expired
-  return t;
-}
+// validateShareToken no longer needed — data is in the URL itself
 
-function showShareView(type, token, fy) {
-  const tokenData = validateShareToken(token);
-  if (!tokenData || tokenData.type !== type) {
+function showShareView(type, encodedData) {
+  // Decode the self-contained payload from the URL — no localStorage needed
+  let payload;
+  try {
+    payload = JSON.parse(decodeURIComponent(escape(atob(encodedData))));
+  } catch(e) {
+    payload = null;
+  }
+
+  function showExpired(msg) {
     document.getElementById('share-content').innerHTML = `
       <div style="text-align:center;padding:80px 20px;color:var(--text3)">
         <div style="font-size:48px;margin-bottom:16px">🔒</div>
-        <div style="font-family:'Syne',sans-serif;font-size:18px;margin-bottom:8px;color:var(--text)">Link Expired or Invalid</div>
-        <div style="font-size:13px">This share link is no longer valid. Ask Sofire-IT Support for a new link.</div>
+        <div style="font-family:'Syne',sans-serif;font-size:18px;margin-bottom:8px;color:var(--text)">${msg||'Link Expired or Invalid'}</div>
+        <div style="font-size:13px">Ask Sofire-IT Support to generate a new share link.</div>
       </div>`;
     document.getElementById('share-view').classList.add('show');
     document.getElementById('login-screen').classList.remove('show');
     document.querySelector('.app').style.display = 'none';
-    return;
   }
-  // Build the shared expense report
-  load(); // load state so we have data
-  const s = state.settings;
-  const fyYear = parseInt(fy || tokenData.fy || 2027);
-  const fyStart = s.fyStart || 3;
-  const fyStartDate = new Date(`${fyYear-1}-${String(fyStart).padStart(2,'0')}-01`);
-  const fyEndDate = new Date(`${fyYear}-${String(fyStart).padStart(2,'0')}-01`);
-  const exps = state.expenses.filter(e => { const d = new Date(e.date); return d >= fyStartDate && d < fyEndDate; });
-  const grossIncome = state.payments.filter(p => { const d = new Date(p.date); return d >= fyStartDate && d < fyEndDate; }).reduce((a,p) => a + parseFloat(p.amount||0), 0);
+
+  if (!payload || payload.type !== type) return showExpired('Invalid Share Link');
+  if (payload.expiresAt > 0 && Date.now() > payload.expiresAt) return showExpired('This Link Has Expired');
+
+  // All data is in the payload — no localStorage needed
+  const exps = payload.exps || [];
+  const payments = payload.payments || [];
+  const grossIncome = payments.reduce((a,p) => a + parseFloat(p.amount||0), 0);
   const totalExp = exps.reduce((a,e) => a + parseFloat(e.amount||0), 0);
   const taxable = Math.max(0, grossIncome - totalExp);
-  const fmt = v => 'R' + v.toLocaleString('en-ZA', {minimumFractionDigits:2,maximumFractionDigits:2});
+  const fyYear = parseInt(payload.fy || 2027);
+  const fmt = v => 'R' + parseFloat(v||0).toLocaleString('en-ZA', {minimumFractionDigits:2,maximumFractionDigits:2});
   const catMap = {};
-  exps.forEach(e => catMap[e.category] = (catMap[e.category]||0) + e.amount);
-  // Company branding
-  document.getElementById('share-company-name').textContent = s.company || 'Sofire-IT Support';
+  exps.forEach(e => catMap[e.category] = (catMap[e.category]||0) + parseFloat(e.amount||0));
+
+  // Company branding from payload
+  document.getElementById('share-company-name').textContent = payload.company || 'Sofire-IT Support';
   document.getElementById('share-date').textContent = new Date().toLocaleDateString('en-ZA',{day:'numeric',month:'long',year:'numeric'});
-  if (s.logoData) document.getElementById('share-logo-wrap').innerHTML = `<img src="${s.logoData}" style="width:40px;height:40px;object-fit:contain;border-radius:8px">`;
-  const rows = exps.sort((a,b)=>new Date(a.date)-new Date(b.date)).map(e => `
+  if (payload.logoData) {
+    document.getElementById('share-logo-wrap').innerHTML = `<img src="${payload.logoData}" style="width:40px;height:40px;object-fit:contain;border-radius:8px">`;
+  }
+
+  const rows = [...exps].sort((a,b)=>new Date(a.date)-new Date(b.date)).map(e => `
     <tr>
       <td class="mono" style="color:var(--text2);padding:10px 12px;border-bottom:1px solid var(--border);font-size:12px">${e.date}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid var(--border);font-size:12px"><span style="background:var(--surface3);color:var(--text2);padding:2px 7px;border-radius:4px;font-size:10px">${e.category.split('–')[0].trim()}</span></td>
-      <td style="padding:10px 12px;border-bottom:1px solid var(--border);font-size:12px">${e.desc}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid var(--border);font-size:12px"><span style="background:var(--surface3);color:var(--text2);padding:2px 7px;border-radius:4px;font-size:10px">${(e.category||'').split('–')[0].trim()}</span></td>
+      <td style="padding:10px 12px;border-bottom:1px solid var(--border);font-size:12px">${e.desc||''}</td>
       <td class="mono" style="padding:10px 12px;border-bottom:1px solid var(--border);font-size:12px;color:var(--accent);text-align:right">${fmt(e.amount)}</td>
       <td style="padding:10px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text3)">${e.method||''}</td>
     </tr>`).join('');
+
   const catCards = Object.entries(catMap).sort((a,b)=>b[1]-a[1]).map(([cat,amt]) => `
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;min-width:160px">
       <div style="font-size:11px;color:var(--text3);margin-bottom:4px">${cat.split('–')[0].trim()}</div>
       <div style="font-family:'DM Mono',monospace;font-size:15px;color:var(--accent)">${fmt(amt)}</div>
     </div>`).join('');
+
   document.getElementById('share-content').innerHTML = `
     <div style="margin-bottom:20px">
       <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:4px">Expense Report — FY ${fyYear-1}/${fyYear}</div>
-      <div style="font-size:12px;color:var(--text3)">${s.company||''} · ${s.owner||''}</div>
+      <div style="font-size:12px;color:var(--text3)">${payload.company||''} · ${payload.owner||''}</div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px">
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;border-top:3px solid var(--green)">
@@ -1291,8 +1311,10 @@ function showShareView(type, token, fy) {
       </div>
     </div>
     <div style="margin-top:16px;font-size:11px;color:var(--text3);text-align:center">
-      This is a read-only shared report. Generated by Sofire-IT Support CRM.
+      Read-only shared report · Generated by Sofire-IT Support CRM · ${new Date().toLocaleDateString('en-ZA')}
+      ${payload.expiresAt > 0 ? ` · Expires ${new Date(payload.expiresAt).toLocaleDateString('en-ZA')}` : ''}
     </div>`;
+
   document.getElementById('share-view').classList.add('show');
   document.getElementById('login-screen').classList.remove('show');
   document.querySelector('.app').style.display = 'none';
@@ -1337,8 +1359,7 @@ let state = {
     branch:'250655',
     accType:'First Business Zero Account',
     // SMTP configured via Netlify environment variables
-    vatNum:'', taxNum:'',
-    vatRate:15, vatOnInvoices:false,
+    taxNum:'',
     fyStart:3,
     bkEmail:'',
     logoData:null,
@@ -1412,8 +1433,7 @@ function loadSettings(){
   setV('set-phone',s.phone);setV('set-email',s.email);setV('set-website',s.website);setV('set-address',s.address);
   setV('set-bank',s.bank);setV('set-acc-holder',s.accHolder);setV('set-acc-num',s.accNum);
   setV('set-branch',s.branch);setV('set-acc-type',s.accType);
-  setV('set-vat',s.vatNum);setV('set-tax-num',s.taxNum);
-  setV('set-vat-rate',s.vatRate);setV('set-vat-inv',s.vatOnInvoices?'1':'0');
+  setV('set-tax-num',s.taxNum);
   setV('set-fy-start',s.fyStart);setV('set-bk-email',s.bkEmail);
   setV('set-refund-policy',s.defaultRefundPolicy);setV('set-client-obligations',s.defaultClientObligations);
   if(s.logoData){showLogoPreview(s.logoData);}
@@ -1426,9 +1446,7 @@ function saveSettings(){
     phone:gv('set-phone'),email:gv('set-email'),website:gv('set-website'),address:gv('set-address'),
     bank:gv('set-bank'),accHolder:gv('set-acc-holder'),accNum:gv('set-acc-num'),
     branch:gv('set-branch'),accType:gv('set-acc-type'),
-    vatNum:gv('set-vat'),taxNum:gv('set-tax-num'),
-    vatRate:parseFloat(gv('set-vat-rate'))||15,
-    vatOnInvoices:gv('set-vat-inv')==='1',
+    taxNum:gv('set-tax-num'),
     fyStart:parseInt(gv('set-fy-start'))||3,
     bkEmail:gv('set-bk-email'),
     defaultRefundPolicy:gv('set-refund-policy'),
@@ -1498,7 +1516,7 @@ function renderDashboard(){
   document.getElementById('tax-exp').textContent=fmt(expTotal);
   document.getElementById('tax-taxable').textContent=fmt(taxable);
   document.getElementById('tax-sars').textContent=fmt(tax)+(payeCredit>0?' (after PAYE)':'');
-  document.getElementById('tax-vat').textContent=fmt(invEarned*(s.vatRate/100));
+
 
   const recent=[...state.invoices].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,6);
   const tbody=document.getElementById('dashboard-invoices-tbody');
@@ -1698,16 +1716,10 @@ function updatePreview(){
 
   // Totals
   const subtotal=items.reduce((a,i)=>a+i.amount,0);
-  const vatAmt=s.vatOnInvoices?subtotal*(s.vatRate/100):0;
-  const total=subtotal+vatAmt;
-  const fmtR=v=>'R'+v.toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
+    const fmtR=v=>'R'+v.toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
   document.getElementById('p-subtotal').textContent=fmtR(subtotal);
-  const vatRow=document.getElementById('p-vat-row');
-  if(vatRow)vatRow.style.display=s.vatOnInvoices?'':'none';
-  const vatEl=document.getElementById('p-vat');
-  if(vatEl){vatEl.textContent=fmtR(vatAmt);document.getElementById('p-vat-rate').textContent=s.vatRate||15;}
-  document.getElementById('p-total-row').textContent=fmtR(total);
-  document.getElementById('p-total').textContent=fmtR(total);
+  document.getElementById('p-total-row').textContent=fmtR(subtotal);
+  document.getElementById('p-total').textContent=fmtR(subtotal);
 
   // Terms & Policies — live update in preview
   const refund=document.getElementById('inv-refund-policy')?.value||'';
@@ -1724,8 +1736,7 @@ function collectInvoiceData(status){
   const s=state.settings;
   const items=getLineItems();
   const subtotal=items.reduce((a,i)=>a+i.amount,0);
-  const vatAmt=s.vatOnInvoices?subtotal*(s.vatRate/100):0;
-  const total=subtotal+vatAmt;
+  const total=subtotal;
   return{
     id:state.editingId||Date.now().toString(),
     number:document.getElementById('inv-number').value,
@@ -1737,7 +1748,7 @@ function collectInvoiceData(status){
     custEmail:document.getElementById('inv-cust-email').value,
     custAddr:document.getElementById('inv-cust-addr').value,
     notes:document.getElementById('inv-notes').value,
-    items,subtotal,vatAmt,total,
+    items,subtotal,total,
     refundPolicy:document.getElementById('inv-refund-policy').value,
     clientObligations:document.getElementById('inv-client-obligations').value
   };
@@ -1815,7 +1826,6 @@ function buildInvoiceHTML(inv,s){
   const company=s.company||'Sofire-IT Support (Juan Du Plessis Freelance)';
   const items=(inv.items||[]);
   const subtotal=parseFloat(inv.subtotal||inv.total||0);
-  const vatAmt=parseFloat(inv.vatAmt||0);
   const total=parseFloat(inv.total||0);
   const itemRows=items.map(i=>{
     const parts=i.desc.split('|');const main=parts[0].trim();const sub=parts[1]?parts[1].trim():'';
@@ -1873,7 +1883,7 @@ function buildInvoiceHTML(inv,s){
       <tbody>${itemRows||'<tr><td colspan="4" style="padding:12px 10px;color:#bbb;font-size:10px">No items</td></tr>'}</tbody>
       <tfoot>
         <tr><td colspan="3" style="padding:8px 10px;text-align:right;color:#555;font-size:11px">Subtotal</td><td style="padding:8px 10px;text-align:right;font-weight:600">${fmtR(subtotal)}</td></tr>
-        ${vatAmt?`<tr><td colspan="3" style="padding:8px 10px;text-align:right;color:#555;font-size:11px">VAT (${s.vatRate||15}%)</td><td style="padding:8px 10px;text-align:right;font-weight:600">${fmtR(vatAmt)}</td></tr>`:''}
+
         <tr><td colspan="3" style="padding:8px 10px;text-align:right;color:#555;font-size:11px">Total</td><td style="padding:8px 10px;text-align:right;font-weight:600">${fmtR(total)}</td></tr>
         <tr style="border-top:1px solid #ccc">
           <td colspan="3" style="padding:14px 10px;font-size:13px;font-weight:800;color:#111"><strong>Amount Due</strong></td>
@@ -2284,7 +2294,11 @@ function renderPayments(){
       <td class="mono" style="color:var(--text)">R${(parseFloat(p.amount||0)-parseFloat(p.paye||0)-parseFloat(p.uif||0)).toFixed(2)}</td>
       <td><span class="badge badge-draft">${p.method||'EFT'}</span></td>
       <td>${p.proofName?`<span class="badge badge-paid" style="cursor:pointer" onclick="viewProof('${p.id}')">📎 ${p.proofName}</span>`:'<span style="color:var(--text3);font-size:11px">—</span>'}</td>
-    </tr>`).join(''):'<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">💳</div><div class="empty-text">No income recorded yet</div></div></td></tr>';
+      <td><div style="display:flex;gap:5px">
+        <button class="btn btn-ghost btn-sm" onclick="editPayment('${p.id}')">Edit</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--accent)" onclick="deletePayment('${p.id}')">✕</button>
+      </div></td>
+    </tr>`).join(''):'<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">💳</div><div class="empty-text">No income recorded yet</div></div></td></tr>';
 }
 let currentPayType='invoice';
 function setPayType(type){
@@ -2302,25 +2316,53 @@ function setPayType(type){
   document.getElementById('pay-modal-title').textContent=isInv?'Record Invoice Payment':'Record Salary / Income';
   if(!isInv){document.getElementById('p-method').value='EFT';}
 }
-function openPaymentModal(){
-  currentPayType='invoice';
-  setPayType('invoice');
+let editingPayId=null;
+function openPaymentModal(editId){
+  editingPayId=editId||null;
+  const p=editId?state.payments.find(x=>x.id===editId):null;
+  const isSal=p?p.type==='salary':false;
+  currentPayType=isSal?'salary':'invoice';
+  setPayType(currentPayType);
+  // Populate invoice selector
   const sel=document.getElementById('p-inv-select');
   sel.innerHTML='<option value="">Select invoice (optional)...</option>';
-  state.invoices.filter(i=>i.status!=='paid').forEach(inv=>sel.innerHTML+=`<option value="${inv.id}">${inv.number} – ${inv.custName} (R${parseFloat(inv.total||0).toFixed(2)})</option>`);
-  document.getElementById('p-date-input').value=new Date().toISOString().split('T')[0];
-  document.getElementById('p-amount').value='';
-  document.getElementById('p-ref').value='';
-  document.getElementById('p-paye').value='0';
-  document.getElementById('p-uif').value='0';
-  document.getElementById('p-employer').value='';
-  document.getElementById('p-notes-input').value='';
-  document.getElementById('upload-preview').textContent='';
-  document.getElementById('upload-area').style.borderColor='';
+  state.invoices.filter(i=>i.status!=='paid'||(p&&i.id===p.invoiceId)).forEach(inv=>sel.innerHTML+=`<option value="${inv.id}"${p&&p.invoiceId===inv.id?' selected':''}>${inv.number} – ${inv.custName} (R${parseFloat(inv.total||0).toFixed(2)})</option>`);
+  // Fill fields
+  document.getElementById('p-date-input').value=p?p.date:new Date().toISOString().split('T')[0];
+  document.getElementById('p-amount').value=p?p.amount:'';
+  document.getElementById('p-ref').value=p?p.ref||'':'';
+  document.getElementById('p-paye').value=p?p.paye||0:0;
+  document.getElementById('p-uif').value=p?p.uif||0:0;
+  document.getElementById('p-employer').value=p?p.employer||'':'';
+  document.getElementById('p-notes-input').value=p?p.notes||'':'';
+  document.getElementById('upload-preview').textContent=p&&p.proofName?'✓ '+p.proofName:'';
+  document.getElementById('upload-area').style.borderColor=p&&p.proofName?'var(--green)':'';
   document.getElementById('pop-file').value='';
   uploadedFile=null;
-  sel.onchange=function(){const inv=state.invoices.find(i=>i.id===this.value);if(inv)document.getElementById('p-amount').value=inv.total;};
+  // Salary type
+  if(p&&p.salaryType){
+    const st=document.getElementById('p-salary-type');
+    if(st)[...st.options].forEach(o=>{if(o.value===p.salaryType)o.selected=true;});
+  }
+  // Method
+  if(p){const pm=document.getElementById('p-method');[...pm.options].forEach(o=>{if(o.value===p.method)o.selected=true;});}
+  // Update modal title and save button
+  document.getElementById('pay-modal-title').textContent=editId?(isSal?'Edit Salary / Income':'Edit Invoice Payment'):(isSal?'Record Salary / Income':'Record Income');
+  document.querySelector('#payment-modal .modal-footer .btn-green').textContent=editId?'✓ Save Changes':'✓ Record';
+  sel.onchange=function(){const inv=state.invoices.find(i=>i.id===this.value);if(inv&&!editId)document.getElementById('p-amount').value=inv.total;};
   openModal('payment-modal');
+}
+function editPayment(id){openPaymentModal(id);}
+function deletePayment(id){
+  if(!confirm('Delete this payment record?'))return;
+  // If it was an invoice payment, revert invoice status to pending
+  const p=state.payments.find(x=>x.id===id);
+  if(p&&p.type!=='salary'&&p.invoiceId){
+    const inv=state.invoices.find(i=>i.id===p.invoiceId);
+    if(inv&&inv.status==='paid')inv.status='pending';
+  }
+  state.payments=state.payments.filter(x=>x.id!==id);
+  save();renderPayments();renderDashboard();toast('Payment deleted','error');
 }
 function handleFileUpload(input){
   uploadedFile=input.files[0];
@@ -2342,7 +2384,7 @@ function savePayment(){
   const invId=document.getElementById('p-inv-select').value;
   const inv=invId?state.invoices.find(i=>i.id===invId):null;
   const payment={
-    id:Date.now().toString(),
+    id:editingPayId||Date.now().toString(),
     type:isSal?'salary':'invoice',
     // Invoice fields
     invoiceId:invId||'',
@@ -2362,12 +2404,22 @@ function savePayment(){
     proofName:uploadedFile?uploadedFile.name:null
   };
   const finish=()=>{
-    state.payments.push(payment);
-    // Only mark invoice paid if this is an invoice payment
-    if(!isSal&&inv)inv.status='paid';
+    if(editingPayId){
+      // Edit existing — preserve proofData if no new file uploaded
+      const idx=state.payments.findIndex(x=>x.id===editingPayId);
+      if(idx>=0){
+        payment.id=editingPayId;
+        if(!uploadedFile&&state.payments[idx].proofData)payment.proofData=state.payments[idx].proofData;
+        if(!uploadedFile&&state.payments[idx].proofName)payment.proofName=state.payments[idx].proofName;
+        state.payments[idx]=payment;
+      }
+    } else {
+      state.payments.push(payment);
+      if(!isSal&&inv)inv.status='paid';
+    }
     save();closeModal('payment-modal');renderPayments();renderDashboard();
-    toast(isSal?'Salary recorded ✓':'Payment recorded ✓','success');
-    uploadedFile=null;
+    toast(editingPayId?'Payment updated ✓':(isSal?'Salary recorded ✓':'Payment recorded ✓'),'success');
+    uploadedFile=null;editingPayId=null;
   };
   if(uploadedFile){const r=new FileReader();r.onload=e=>{payment.proofData=e.target.result;finish();};r.readAsDataURL(uploadedFile);}
   else finish();
@@ -2480,9 +2532,7 @@ function renderExpenses(){
   const totalExp=exps.reduce((a,e)=>a+parseFloat(e.amount||0),0);
   const taxable=Math.max(0,grossIncome-totalExp);
   const tax=Math.max(0,calcSARSTax(taxable)-fyPayeCredit);
-  const vatRate=state.settings.vatRate||15;
-  const vatOut=grossIncome*(vatRate/100);
-  const vatIn=totalExp*(vatRate/100);
+
   const fmt=v=>'R'+v.toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
   document.getElementById('tx-gross').textContent=fmt(grossIncome);
   document.getElementById('tx-exp-tot').textContent=fmt(totalExp);
@@ -2490,9 +2540,7 @@ function renderExpenses(){
   document.getElementById('tx-income-tax').textContent=fmt(tax);
   document.getElementById('tx-eff-rate').textContent=grossIncome>0?(tax/grossIncome*100).toFixed(1)+'%':'0%';
   document.getElementById('tx-prov').textContent=fmt(tax/2);
-  document.getElementById('tx-vat-out').textContent=fmt(vatOut);
-  document.getElementById('tx-vat-in').textContent=fmt(vatIn);
-  document.getElementById('tx-vat-pay').textContent=fmt(Math.max(0,vatOut-vatIn));
+
   // Table
   let filtered=monthFilter==='all'?exps:exps.filter(e=>new Date(e.date).getMonth()+1===parseInt(monthFilter));
   if(catFilter!=='all')filtered=filtered.filter(e=>e.category===catFilter);
@@ -2752,12 +2800,11 @@ async function handleChangePassword() {
 // Check if this is a share link
 const urlParams = new URLSearchParams(window.location.search);
 const shareType = urlParams.get('share');
-const shareToken = urlParams.get('token');
-const shareFY = urlParams.get('fy');
+const shareData = urlParams.get('data');
 
-if (shareType && shareToken) {
-  // Share view — no login needed
-  showShareView(shareType, shareToken, shareFY);
+if (shareType && shareData) {
+  // Share view — self-contained, no login needed
+  showShareView(shareType, shareData);
 } else if (isLoggedIn()) {
   // Already authenticated
   showApp();
@@ -2769,7 +2816,7 @@ if (shareType && shareToken) {
 // Seed if fresh
 if(state.invoices.length===0&&state.customers.length===0){
   state.customers.push({id:'seed-1',name:'Laerskool Doringkloof Primary',phone:'+27 126 671 977',email:'',addr:'https://www.dories.co.za/',notes:''});
-  state.invoices.push({id:'seed-inv-1',number:'202603845',date:'2026-03-25',due:'2026-04-25',status:'pending',custName:'Laerskool Doringkloof Primary',custPhone:'+27 126 671 977',custEmail:'',custAddr:'https://www.dories.co.za/',notes:'',items:[{desc:'Website Maintenance | Content Updates, Plugins and Theme Updates',price:1050,qty:1,amount:1050}],subtotal:1050,vatAmt:0,total:1050,refundPolicy:"Sofire-IT Support (Juan Du Plessis Freelance) operates under a strict no-refund policy. Once services are completed and delivered to the client's satisfaction, no refunds will be issued under any circumstances.",clientObligations:"It is the responsibility of the client to provide clear instructions, feedback, and any necessary materials required for the completion of the services. Failure to do so may result in delays or additional charges, but it does not warrant a refund."});
+  state.invoices.push({id:'seed-inv-1',number:'202603845',date:'2026-03-25',due:'2026-04-25',status:'pending',custName:'Laerskool Doringkloof Primary',custPhone:'+27 126 671 977',custEmail:'',custAddr:'https://www.dories.co.za/',notes:'',items:[{desc:'Website Maintenance | Content Updates, Plugins and Theme Updates',price:1050,qty:1,amount:1050}],subtotal:1050,total:1050,refundPolicy:"Sofire-IT Support (Juan Du Plessis Freelance) operates under a strict no-refund policy. Once services are completed and delivered to the client's satisfaction, no refunds will be issued under any circumstances.",clientObligations:"It is the responsibility of the client to provide clear instructions, feedback, and any necessary materials required for the completion of the services. Failure to do so may result in delays or additional charges, but it does not warrant a refund."});
   // Seed expense data to match the spreadsheet (March 2024 – Feb 2025)
   const seedMonths=[{m:'2024-03',total:12865.80},{m:'2024-04',total:12511.48},{m:'2024-05',total:40053.94},{m:'2024-06',total:25759.52},{m:'2024-07',total:25725.93},{m:'2024-08',total:29890.38},{m:'2024-09',total:32881.76},{m:'2024-10',total:28682.17},{m:'2024-11',total:32021.50},{m:'2024-12',total:30995.46},{m:'2025-01',total:31716.07},{m:'2025-02',total:28220.19}];
   const seedExpCats=['Bank Charges','Motor Vehicle – Petrol','Wifi / Internet','Laptop / Monitor','House Rent (home office)','Insurance','Cellphone','Vehicle Instalment','Hosting','Microsoft Software','Electricity'];
