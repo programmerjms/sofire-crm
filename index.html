@@ -1145,7 +1145,7 @@ textarea{resize:vertical;min-height:70px}
                   <span style="font-family:'DM Mono',monospace;color:var(--yellow)" id="ptax-ytd-paid">R0</span>
                 </div>
                 <div style="padding:10px 13px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;font-size:12px">
-                  <span style="color:var(--text2)">SARS Tax on YTD Income</span>
+                  <span style="color:var(--text2)" id="ptax-ytd-owed-label">SARS Tax on YTD Income (annualised)</span>
                   <span style="font-family:'DM Mono',monospace;color:var(--yellow)" id="ptax-ytd-owed">R0</span>
                 </div>
                 <div style="padding:11px 13px;display:flex;justify-content:space-between;font-size:13px;font-weight:700">
@@ -2993,23 +2993,32 @@ function calcSalaryTax(){
   // ── Projected annual income: actual YTD + rolling average for remaining months
   const projectedAnnual = ytdIncome + (rollingAvg * monthsLeft);
 
-  // ── Tax on projected annual income
+  // ── CORRECT SARS approach: annualise FIRST, then take the YTD proportion
+  // SARS taxes annual income — never apply brackets to a partial-year amount directly
+
+  // Annualise the projected income and compute full-year tax
   const projectedAnnualTax = calcSARSTax(projectedAnnual);
 
-  // ── Tax on actual YTD income (what SARS would say you owe right now)
-  const ytdTaxOwed  = calcSARSTax(ytdIncome);
-  const ytdBalance  = ytdTaxPaid - ytdTaxOwed; // positive=ahead, negative=behind
+  // YTD tax owed = annualise the YTD income, then take the months-gone fraction
+  // This is how SARS actually does provisional tax calculations
+  const ytdAnnualised   = ytdIncome / monthsGone * 12;            // what your income annualises to
+  const ytdAnnualTax    = calcSARSTax(ytdAnnualised);             // annual tax on that rate
+  const ytdTaxOwed      = ytdAnnualTax * (monthsGone / 12);       // your share so far
+  const ytdBalance      = ytdTaxPaid - ytdTaxOwed;                // positive=ahead, negative=behind
 
-  // ── How much tax to pay this month to be on track for projection
-  // Spread remaining projected tax evenly over remaining months
-  const taxAlreadyOwed       = ytdTaxOwed;
+  // Monthly tax you should be paying (based on projected annual)
+  const monthlyTaxTarget = projectedAnnualTax / 12;
+
+  // ── How much to pay this month to stay on track
+  // Remaining tax needed = projected total - already paid, spread over remaining+1 months
   const projectedRemainingTax = Math.max(0, projectedAnnualTax - ytdTaxPaid);
-  const monthsToSpread        = Math.max(1, monthsLeft + 1); // +1 = include this month
+  const monthsToSpread        = Math.max(1, monthsLeft + 1);
   const suggestedThisMonth    = projectedRemainingTax / monthsToSpread;
 
-  // ── "Tax on this month's income" = marginal contribution
-  const taxWithout  = calcSARSTax(Math.max(0, ytdIncome - gross));
-  const taxOnThis   = Math.max(0, ytdTaxOwed - taxWithout);
+  // ── Tax attributable to THIS month's income only
+  // = difference in YTD tax with vs without this month (marginal)
+  const ytdWithout    = calcSARSTax((ytdIncome - gross) / Math.max(1,monthsGone-1) * 12) * (Math.max(1,monthsGone-1)/12);
+  const taxOnThis     = Math.max(0, ytdTaxOwed - ytdWithout);
   const thisMonthShortfall = taxOnThis - taxPaid;
 
   // Net take-home
@@ -3019,14 +3028,16 @@ function calcSalaryTax(){
   set('ptax-monthly-gross', fmt(gross));
   set('ptax-annual-gross',  fmt(projectedAnnual));
   set('ptax-annual-tax',    fmt(projectedAnnualTax));
-  set('ptax-monthly-tax',   fmt(taxOnThis));
+  set('ptax-monthly-tax',   fmt(monthlyTaxTarget));  // projected annual ÷ 12
   set('ptax-paye-this',     fmt(taxPaid));
   set('ptax-d-paye',        fmt(taxPaid));
   set('ptax-d-uif',         fmt(otherDed));
   set('ptax-net',           fmt(net));
   set('ptax-ytd-income',    fmt(ytdIncome));
   set('ptax-ytd-paid',      fmt(ytdTaxPaid));
-  set('ptax-ytd-owed',      fmt(ytdTaxOwed));
+  set('ptax-ytd-owed', fmt(ytdTaxOwed));
+  const ytdOwedLbl=document.getElementById('ptax-ytd-owed-label');
+  if(ytdOwedLbl) ytdOwedLbl.textContent=`SARS Tax on YTD (${fmt(ytdAnnualised)}/yr × ${monthsGone}/12)`;
 
   // Update dynamic labels
   const annLbl = document.getElementById('ptax-annual-label');
@@ -3080,17 +3091,17 @@ function calcSalaryTax(){
       msgEl.style.background='rgba(45,218,140,.1)';
       msgEl.style.border='1px solid rgba(45,218,140,.2)';
       msgEl.style.color='var(--green)';
-      msgEl.textContent=`✓ You are on track. Based on your actual income of ${fmt(ytdIncome)} this year and a projected annual of ${fmt(projectedAnnual)}, your tax looks correct.`;
+      msgEl.textContent=`✓ You are on track. Your YTD income of ${fmt(ytdIncome)} annualises to ${fmt(ytdAnnualised)}, giving a YTD tax of ${fmt(ytdTaxOwed)}. You have paid ${fmt(ytdTaxPaid)}.`;
     } else if(ytdBalance<-50){
       msgEl.style.background='rgba(255,60,60,.08)';
       msgEl.style.border='1px solid rgba(255,60,60,.15)';
       msgEl.style.color='var(--accent)';
-      msgEl.textContent=`⚠ You are behind by ${fmt(Math.abs(ytdBalance))} in tax payments so far this year. SARS calculates tax on your total income of ${fmt(ytdIncome)}, not each month separately — catch up over the next ${monthsLeft} months.`;
+      msgEl.textContent=`⚠ You are behind by ${fmt(Math.abs(ytdBalance))}. Your ${fmt(ytdIncome)} YTD income annualises to ${fmt(ytdAnnualised)}/year — SARS expects ${fmt(ytdTaxOwed)} tax for ${monthsGone} months but you paid ${fmt(ytdTaxPaid)}. Catch up over ${monthsLeft} months.`;
     } else if(ytdBalance>50){
       msgEl.style.background='rgba(45,218,140,.08)';
       msgEl.style.border='1px solid rgba(45,218,140,.15)';
       msgEl.style.color='var(--green)';
-      msgEl.textContent=`✓ You are ahead by ${fmt(ytdBalance)} — your income is lower this year so far. You may receive a refund or can pay less this month.`;
+      msgEl.textContent=`✓ You are ahead by ${fmt(ytdBalance)}. Your ${fmt(ytdIncome)} YTD income annualises to ${fmt(ytdAnnualised)}/year, giving ${fmt(ytdTaxOwed)} tax for ${monthsGone} months. You have paid ${fmt(ytdTaxPaid)} — ahead by ${fmt(ytdBalance)}.`;
     } else {
       msgEl.style.background='rgba(255,194,74,.08)';
       msgEl.style.border='1px solid rgba(255,194,74,.15)';
@@ -3116,7 +3127,7 @@ function calcSalaryTax(){
       suggestEl.style.borderLeftColor='var(--green)';
     } else {
       suggestNote.textContent =
-        `Based on ${fmt(projectedAnnual)} projected annual income. Recalculates every month as your dollar income changes.`;
+        `Based on ${fmt(projectedAnnual)} projected annual (${fmt(monthlyTaxTarget)}/month). Recalculates as your USD income changes each month.`;
       suggestEl.style.borderLeftColor='var(--yellow)';
     }
   }
