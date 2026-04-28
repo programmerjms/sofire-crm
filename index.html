@@ -690,6 +690,7 @@ textarea{resize:vertical;min-height:70px}
         <div class="tax-row"><span class="tax-label">Gross Tax (before rebates)</span><span class="tax-val" id="ptax-gross-tax">R0</span></div>
         <div class="tax-row"><span class="tax-label">Primary Rebate</span><span class="tax-val" style="color:var(--green)" id="ptax-rebate">−R17,235</span></div>
         <div class="tax-row"><span class="tax-label">PAYE Already Paid</span><span class="tax-val" style="color:var(--green)" id="ptax-paye-credit">−R0</span></div>
+        <div class="tax-row"><span class="tax-label">Tax Paid to SARS</span><span class="tax-val" style="color:var(--green)" id="ptax-tax-paid">−R0</span></div>
         <div class="tax-row" style="border-top:1px solid var(--border);margin-top:4px;padding-top:8px">
           <span class="tax-label" style="color:var(--text);font-weight:500">Tax Still Owed</span>
           <span class="tax-val" style="font-size:16px" id="ptax-owed">R0</span>
@@ -803,7 +804,7 @@ textarea{resize:vertical;min-height:70px}
         </select>
       </div>
     </div>
-    <div style="padding:18px;display:grid;grid-template-columns:1fr 1fr;gap:18px">
+    <div style="padding:18px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px">
       <div>
         <div style="font-size:11px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace">Income</div>
         <div class="tax-row"><span class="tax-label">Gross Revenue</span><span class="tax-val" id="tx-gross">R0</span></div>
@@ -811,12 +812,28 @@ textarea{resize:vertical;min-height:70px}
         <div class="tax-row highlight"><span class="tax-label">Taxable Income</span><span class="tax-val" id="tx-taxable">R0</span></div>
       </div>
       <div>
-        <div style="font-size:11px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace">SARS Tax Brackets</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace">SARS Tax Calculation</div>
         <div class="tax-row"><span class="tax-label">Income Tax (est.)</span><span class="tax-val" id="tx-income-tax">R0</span></div>
+        <div class="tax-row"><span class="tax-label">Less: PAYE Withheld</span><span class="tax-val" style="color:var(--green)" id="tx-paye-credit">−R0</span></div>
+        <div class="tax-row"><span class="tax-label">Less: Tax Already Paid</span><span class="tax-val" style="color:var(--green)" id="tx-paid-credit">−R0</span></div>
+        <div class="tax-row highlight" style="border-top:1px solid var(--border);margin-top:6px;padding-top:8px">
+          <span class="tax-label" style="color:var(--text)">Still Owed to SARS</span>
+          <span class="tax-val" style="font-size:16px" id="tx-still-owed">R0</span>
+        </div>
         <div class="tax-row"><span class="tax-label">Effective Rate</span><span class="tax-val" id="tx-eff-rate">0%</span></div>
-        <div class="tax-row"><span class="tax-label">Provisional Tax (×2)</span><span class="tax-val" id="tx-prov">R0</span></div>
+        <div class="tax-row"><span class="tax-label">Provisional Tax (÷2)</span><span class="tax-val" id="tx-prov">R0</span></div>
+        <div class="tax-row"><span class="tax-label">Set aside / month</span><span class="tax-val" style="color:var(--yellow)" id="tx-monthly">R0</span></div>
       </div>
-
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace">Tax Payments Made</div>
+          <button class="btn btn-ghost btn-sm" onclick="openTaxPaymentModal()" style="font-size:10px;padding:3px 8px">＋ Add</button>
+        </div>
+        <div id="tx-payments-list" style="font-size:12px;color:var(--text3)">No tax payments recorded</div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+          <div class="tax-row"><span class="tax-label">Total Paid to SARS</span><span class="tax-val" style="color:var(--green)" id="tx-total-paid">R0</span></div>
+        </div>
+      </div>
     </div>
     <div style="padding:0 18px 14px;font-size:11px;color:var(--text3)">⚠ Estimates based on 2025/2026 SARS individual tax brackets. Consult your bookkeeper for official returns.</div>
   </div>
@@ -1214,6 +1231,63 @@ textarea{resize:vertical;min-height:70px}
   </div>
 </div>
 
+<!-- Tax Payment Modal -->
+<div class="modal-overlay" id="tax-payment-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="tax-pay-modal-title">Record Tax Payment</div>
+      <button class="modal-close" onclick="closeModal('tax-payment-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--text2);margin-bottom:16px;line-height:1.7">
+        Record any tax amount already paid to SARS — provisional tax, income tax assessments, penalty payments etc. These are deducted from your outstanding tax balance.
+      </p>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Financial Year *</label>
+          <select id="tp-fy">
+            <option value="2025">FY 2024/2025</option>
+            <option value="2026" selected>FY 2025/2026 (Mar 2024–Feb 2025)</option>
+            <option value="2027">FY 2026/2027</option>
+            <option value="2028">FY 2027/2028</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Amount Paid (R) *</label>
+          <input type="number" id="tp-amount" placeholder="0.00" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>Payment Date *</label>
+          <input type="date" id="tp-date">
+        </div>
+        <div class="form-group">
+          <label>Payment Type</label>
+          <select id="tp-type">
+            <option value="provisional_1">Provisional Tax — 1st Payment (Aug/Sep)</option>
+            <option value="provisional_2">Provisional Tax — 2nd Payment (Feb/Mar)</option>
+            <option value="provisional_3">Provisional Tax — 3rd Payment (Top-up)</option>
+            <option value="assessment">Income Tax Assessment Payment</option>
+            <option value="penalty">Penalty / Interest</option>
+            <option value="other">Other SARS Payment</option>
+          </select>
+        </div>
+        <div class="form-group full">
+          <label>SARS Reference Number</label>
+          <input type="text" id="tp-ref" placeholder="e.g. SARS payment reference / eFiling reference">
+        </div>
+        <div class="form-group full">
+          <label>Notes</label>
+          <textarea id="tp-notes" style="min-height:55px" placeholder="e.g. Paid via eFiling, bank reference XYZ"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('tax-payment-modal')">Cancel</button>
+      <button class="btn btn-green" onclick="saveTaxPayment()">✓ Record Tax Payment</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast-container" id="toast-container"></div>
 
 <script>
@@ -1505,7 +1579,7 @@ async function changePassword(currentPw, newPw, confirmPw) {
 //  STATE
 // ============================================================
 let state = {
-  invoices:[], customers:[], payments:[], expenses:[],
+  invoices:[], customers:[], payments:[], expenses:[], taxPayments:[],
   nextInvNum: 202603846,
   editingId: null, editingExpId: null, editingCustId: null,
   currentSendInvId: null,
@@ -1738,8 +1812,13 @@ function renderDashboard(){
   setEl('tax-income',fmt(earned));
   setEl('tax-exp',fmt(expTotal));
   setEl('tax-taxable',fmt(taxable));
-  setEl('tax-sars',fmt(tax)+(payeCredit>0?' (after PAYE)':''));
-  setEl('tax-monthly',fmt(tax/12)+'/mo');
+  // Include tax payments made for this FY in dashboard
+  const dashFyTaxPaid=fyVal==='all'
+    ?(state.taxPayments||[]).reduce((a,tp)=>a+parseFloat(tp.amount||0),0)
+    :(state.taxPayments||[]).filter(tp=>tp.fy===String(fyVal)).reduce((a,tp)=>a+parseFloat(tp.amount||0),0);
+  const dashStillOwed=Math.max(0,tax-dashFyTaxPaid);
+  setEl('tax-sars',fmt(dashStillOwed)+(dashFyTaxPaid>0?' (after payments)':''));
+  setEl('tax-monthly',fmt(dashStillOwed/12)+'/mo');
 
   // ── Auto-select best FY on first load
   const sel=document.getElementById('dash-fy-select');
@@ -1775,7 +1854,8 @@ function renderDashboard(){
       const fyExp=fyExpsAll.reduce((a,e)=>a+parseFloat(e.amount||0),0);
       const fyPaye=fyPaysAll.filter(p=>p.type==='salary').reduce((a,p)=>a+parseFloat(p.paye||0),0);
       const fyTaxable=Math.max(0,fyIncome-fyExp);
-      const fyTax=Math.max(0,calcSARSTax(fyTaxable)-fyPaye);
+      const fyTaxPaidForFY=(state.taxPayments||[]).filter(tp=>tp.fy===String(fy)).reduce((a,tp)=>a+parseFloat(tp.amount||0),0);
+      const fyTax=Math.max(0,calcSARSTax(fyTaxable)-fyPaye-fyTaxPaidForFY);
       const fyProfit=fyIncome-fyExp;
       const effRate=fyIncome>0?((fyTax/fyIncome)*100).toFixed(1)+'%':'0%';
       allFYs.push({fy,fyIncome,fyExp,fyTaxable,fyTax,fyProfit,effRate});
@@ -2661,16 +2741,24 @@ function renderPayments(){
       set('ptax-taxable',fmt(taxable));
       set('ptax-gross-tax',fmt(grossTax));
       set('ptax-rebate','−'+fmt(primaryRebate));
+      // Tax payments already made for this FY
+      const fyTaxAlreadyPaid=(state.taxPayments||[])
+        .filter(tp=>tp.fy===String(fyYear))
+        .reduce((a,tp)=>a+parseFloat(tp.amount||0),0);
+      const stillOwedFinal=Math.max(0,taxOwed-fyTaxAlreadyPaid);
       set('ptax-paye-credit',payeTotal>0?'−'+fmt(payeTotal):'−R0.00');
+      // Add tax paid row to ptax panel if element exists
+      const ptaxPaidEl=document.getElementById('ptax-tax-paid');
+      if(ptaxPaidEl)ptaxPaidEl.textContent=fyTaxAlreadyPaid>0?'−'+fmt(fyTaxAlreadyPaid):'−R0.00';
       const owedEl=document.getElementById('ptax-owed');
-      if(owedEl){owedEl.textContent=fmt(taxOwed);owedEl.style.color=taxOwed>0?'var(--accent)':'var(--green)';}
+      if(owedEl){owedEl.textContent=fmt(stillOwedFinal);owedEl.style.color=stillOwedFinal>0?'var(--accent)':'var(--green)';}
       set('ptax-rate',effRate.toFixed(1)+'%');
       set('ptax-bracket',taxBracketLabel(taxable));
-      set('ptax-annual',fmt(taxOwed));
-      set('ptax-prov1',fmt(taxOwed/2));
-      set('ptax-prov2',fmt(taxOwed/2));
+      set('ptax-annual',fmt(stillOwedFinal));
+      set('ptax-prov1',fmt(stillOwedFinal/2));
+      set('ptax-prov2',fmt(stillOwedFinal/2));
       const monthly=document.getElementById('ptax-monthly');
-      if(monthly)monthly.textContent=fmt(taxOwed/12)+' / month';
+      if(monthly)monthly.textContent=fmt(stillOwedFinal/12)+' / month';
 
       // ── Monthly income bar chart
       renderMonthlyBars(fyYear, start, end);
@@ -2979,13 +3067,52 @@ function renderExpenses(){
   const taxable=Math.max(0,grossIncome-totalExp);
   const tax=Math.max(0,calcSARSTax(taxable)-fyPayeCredit);
 
+  // Tax payments already made for this FY
+  const fyTaxPaid=(state.taxPayments||[])
+    .filter(tp=>tp.fy===String(fyYear))
+    .reduce((a,tp)=>a+parseFloat(tp.amount||0),0);
+  const stillOwed=Math.max(0,tax-fyTaxPaid);
+
   const fmt=v=>'R'+v.toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
   document.getElementById('tx-gross').textContent=fmt(grossIncome);
   document.getElementById('tx-exp-tot').textContent=fmt(totalExp);
   document.getElementById('tx-taxable').textContent=fmt(taxable);
   document.getElementById('tx-income-tax').textContent=fmt(tax);
+  // New fields
+  const payeEl=document.getElementById('tx-paye-credit');
+  if(payeEl)payeEl.textContent=fyPayeCredit>0?'−'+fmt(fyPayeCredit):'−R0.00';
+  const paidEl=document.getElementById('tx-paid-credit');
+  if(paidEl)paidEl.textContent=fyTaxPaid>0?'−'+fmt(fyTaxPaid):'−R0.00';
+  const owedEl=document.getElementById('tx-still-owed');
+  if(owedEl){owedEl.textContent=fmt(stillOwed);owedEl.style.color=stillOwed>0?'var(--accent)':'var(--green)';}
   document.getElementById('tx-eff-rate').textContent=grossIncome>0?(tax/grossIncome*100).toFixed(1)+'%':'0%';
-  document.getElementById('tx-prov').textContent=fmt(tax/2);
+  document.getElementById('tx-prov').textContent=fmt(stillOwed/2);
+  const monthlyEl=document.getElementById('tx-monthly');
+  if(monthlyEl)monthlyEl.textContent=fmt(stillOwed/12)+'/mo';
+  const totalPaidEl=document.getElementById('tx-total-paid');
+  if(totalPaidEl)totalPaidEl.textContent=fmt(fyTaxPaid);
+
+  // Render tax payments list for this FY
+  const fyTaxPaysList=(state.taxPayments||[]).filter(tp=>tp.fy===String(fyYear)).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const listEl=document.getElementById('tx-payments-list');
+  if(listEl){
+    if(fyTaxPaysList.length===0){
+      listEl.innerHTML='<div style="color:var(--text3);font-size:12px;padding:4px 0">No tax payments recorded for this year</div>';
+    } else {
+      listEl.innerHTML=fyTaxPaysList.map(tp=>`
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:500;color:var(--text)">${TAX_PAY_LABELS[tp.type]||tp.type}</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:1px">${tp.date}${tp.ref?' · '+tp.ref:''}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">
+            <span style="font-family:'DM Mono',monospace;font-size:13px;color:var(--green)">R${parseFloat(tp.amount).toFixed(2)}</span>
+            <button class="btn btn-ghost btn-sm" style="padding:3px 7px;font-size:10px" onclick="openTaxPaymentModal('${tp.id}')">Edit</button>
+            <button class="btn btn-ghost btn-sm" style="padding:3px 7px;font-size:10px;color:var(--accent)" onclick="deleteTaxPayment('${tp.id}')">✕</button>
+          </div>
+        </div>`).join('');
+    }
+  }
 
   // Table
   let filtered=monthFilter==='all'?exps:exps.filter(e=>new Date(e.date).getMonth()+1===parseInt(monthFilter));
@@ -3256,6 +3383,71 @@ function resetTermsToDefault(){
 // Spreadsheet seed data — FY2026 (March 2024 – February 2025)
 const seedExpenses=[{"id":"seed-exp-1000","date":"2024-03-15","amount":351.65,"category":"Bank Charges","method":"Bank Statement","desc":"Bank Charges \u2014 March 2024","notes":"","receiptName":null},{"id":"seed-exp-1001","date":"2024-03-15","amount":420.16,"category":"Laptop / Monitor","method":"Bank Statement","desc":"Laptop / Monitor \u2014 March 2024","notes":"","receiptName":null},{"id":"seed-exp-1002","date":"2024-03-15","amount":1637.88,"category":"Insurance","method":"Bank Statement","desc":"Insurance \u2014 March 2024","notes":"","receiptName":null},{"id":"seed-exp-1003","date":"2024-03-15","amount":899.0,"category":"Cellphone","method":"Bank Statement","desc":"Cellphone \u2014 March 2024","notes":"","receiptName":null},{"id":"seed-exp-1004","date":"2024-03-15","amount":6304.11,"category":"Vehicle Instalment","method":"Bank Statement","desc":"Vehicle Instalment \u2014 March 2024","notes":"","receiptName":null},{"id":"seed-exp-1005","date":"2024-03-15","amount":859.0,"category":"Wifi / Internet","method":"Bank Statement","desc":"Wifi / Internet \u2014 March 2024","notes":"","receiptName":null},{"id":"seed-exp-1006","date":"2024-03-15","amount":393.0,"category":"Hosting","method":"Bank Statement","desc":"Hosting \u2014 March 2024","notes":"","receiptName":null},{"id":"seed-exp-1007","date":"2024-03-15","amount":149.0,"category":"Microsoft Software","method":"Bank Statement","desc":"Microsoft Software \u2014 March 2024","notes":"","receiptName":null},{"id":"seed-exp-1008","date":"2024-03-15","amount":1100.0,"category":"Electricity","method":"Bank Statement","desc":"Electricity \u2014 March 2024","notes":"","receiptName":null},{"id":"seed-exp-1009","date":"2024-03-15","amount":752.0,"category":"Online Purchases for Business","method":"Bank Statement","desc":"Online Purchases for Business \u2014 March 2024","notes":"","receiptName":null},{"id":"seed-exp-1010","date":"2024-04-15","amount":177.45,"category":"Bank Charges","method":"Bank Statement","desc":"Bank Charges \u2014 April 2024","notes":"","receiptName":null},{"id":"seed-exp-1011","date":"2024-04-15","amount":420.16,"category":"Laptop / Monitor","method":"Bank Statement","desc":"Laptop / Monitor \u2014 April 2024","notes":"","receiptName":null},{"id":"seed-exp-1012","date":"2024-04-15","amount":1637.88,"category":"Insurance","method":"Bank Statement","desc":"Insurance \u2014 April 2024","notes":"","receiptName":null},{"id":"seed-exp-1013","date":"2024-04-15","amount":1199.0,"category":"Cellphone","method":"Bank Statement","desc":"Cellphone \u2014 April 2024","notes":"","receiptName":null},{"id":"seed-exp-1014","date":"2024-04-15","amount":6304.11,"category":"Vehicle Instalment","method":"Bank Statement","desc":"Vehicle Instalment \u2014 April 2024","notes":"","receiptName":null},{"id":"seed-exp-1015","date":"2024-04-15","amount":1618.88,"category":"Wifi / Internet","method":"Bank Statement","desc":"Wifi / Internet \u2014 April 2024","notes":"","receiptName":null},{"id":"seed-exp-1016","date":"2024-04-15","amount":205.0,"category":"Hosting","method":"Bank Statement","desc":"Hosting \u2014 April 2024","notes":"","receiptName":null},{"id":"seed-exp-1017","date":"2024-04-15","amount":199.0,"category":"Microsoft Software","method":"Bank Statement","desc":"Microsoft Software \u2014 April 2024","notes":"","receiptName":null},{"id":"seed-exp-1018","date":"2024-04-15","amount":750.0,"category":"Electricity","method":"Bank Statement","desc":"Electricity \u2014 April 2024","notes":"","receiptName":null},{"id":"seed-exp-1019","date":"2024-05-15","amount":141.12,"category":"Bank Charges","method":"Bank Statement","desc":"Bank Charges \u2014 May 2024","notes":"","receiptName":null},{"id":"seed-exp-1020","date":"2024-05-15","amount":712.67,"category":"Water & Sanitation","method":"Bank Statement","desc":"Water & Sanitation \u2014 May 2024","notes":"","receiptName":null},{"id":"seed-exp-1021","date":"2024-05-15","amount":420.16,"category":"Laptop / Monitor","method":"Bank Statement","desc":"Laptop / Monitor \u2014 May 2024","notes":"","receiptName":null},{"id":"seed-exp-1022","date":"2024-05-15","amount":26000.0,"category":"House Rent (home office)","method":"Bank Statement","desc":"House Rent (home office) \u2014 May 2024","notes":"","receiptName":null},{"id":"seed-exp-1023","date":"2024-05-15","amount":1637.88,"category":"Insurance","method":"Bank Statement","desc":"Insurance \u2014 May 2024","notes":"","receiptName":null},{"id":"seed-exp-1024","date":"2024-05-15","amount":1199.0,"category":"Cellphone","method":"Bank Statement","desc":"Cellphone \u2014 May 2024","notes":"","receiptName":null},{"id":"seed-exp-1025","date":"2024-05-15","amount":6304.11,"category":"Vehicle Instalment","method":"Bank Statement","desc":"Vehicle Instalment \u2014 May 2024","notes":"","receiptName":null},{"id":"seed-exp-1026","date":"2024-05-15","amount":759.0,"category":"Wifi / Internet","method":"Bank Statement","desc":"Wifi / Internet \u2014 May 2024","notes":"","receiptName":null},{"id":"seed-exp-1027","date":"2024-05-15","amount":205.0,"category":"Hosting","method":"Bank Statement","desc":"Hosting \u2014 May 2024","notes":"","receiptName":null},{"id":"seed-exp-1028","date":"2024-05-15","amount":199.0,"category":"Microsoft Software","method":"Bank Statement","desc":"Microsoft Software \u2014 May 2024","notes":"","receiptName":null},{"id":"seed-exp-1029","date":"2024-05-15","amount":1200.0,"category":"Electricity","method":"Bank Statement","desc":"Electricity \u2014 May 2024","notes":"","receiptName":null},{"id":"seed-exp-1030","date":"2024-05-15","amount":1276.0,"category":"Online Purchases for Business","method":"Bank Statement","desc":"Online Purchases for Business \u2014 May 2024","notes":"","receiptName":null},{"id":"seed-exp-1031","date":"2024-06-15","amount":189.33,"category":"Bank Charges","method":"Bank Statement","desc":"Bank Charges \u2014 June 2024","notes":"","receiptName":null},{"id":"seed-exp-1032","date":"2024-06-15","amount":721.31,"category":"Water & Sanitation","method":"Bank Statement","desc":"Water & Sanitation \u2014 June 2024","notes":"","receiptName":null},{"id":"seed-exp-1033","date":"2024-06-15","amount":420.16,"category":"Laptop / Monitor","method":"Bank Statement","desc":"Laptop / Monitor \u2014 June 2024","notes":"","receiptName":null},{"id":"seed-exp-1034","date":"2024-06-15","amount":13000.0,"category":"House Rent (home office)","method":"Bank Statement","desc":"House Rent (home office) \u2014 June 2024","notes":"","receiptName":null},{"id":"seed-exp-1035","date":"2024-06-15","amount":1637.88,"category":"Insurance","method":"Bank Statement","desc":"Insurance \u2014 June 2024","notes":"","receiptName":null},{"id":"seed-exp-1036","date":"2024-06-15","amount":1199.0,"category":"Cellphone","method":"Bank Statement","desc":"Cellphone \u2014 June 2024","notes":"","receiptName":null},{"id":"seed-exp-1037","date":"2024-06-15","amount":6304.11,"category":"Vehicle Instalment","method":"Bank Statement","desc":"Vehicle Instalment \u2014 June 2024","notes":"","receiptName":null},{"id":"seed-exp-1038","date":"2024-06-15","amount":1383.73,"category":"Wifi / Internet","method":"Bank Statement","desc":"Wifi / Internet \u2014 June 2024","notes":"","receiptName":null},{"id":"seed-exp-1039","date":"2024-06-15","amount":205.0,"category":"Hosting","method":"Bank Statement","desc":"Hosting \u2014 June 2024","notes":"","receiptName":null},{"id":"seed-exp-1040","date":"2024-06-15","amount":199.0,"category":"Microsoft Software","method":"Bank Statement","desc":"Microsoft Software \u2014 June 2024","notes":"","receiptName":null},{"id":"seed-exp-1041","date":"2024-06-15","amount":500.0,"category":"Electricity","method":"Bank Statement","desc":"Electricity \u2014 June 2024","notes":"","receiptName":null},{"id":"seed-exp-1042","date":"2024-07-15","amount":212.21,"category":"Bank Charges","method":"Bank Statement","desc":"Bank Charges \u2014 July 2024","notes":"","receiptName":null},{"id":"seed-exp-1043","date":"2024-07-15","amount":720.57,"category":"Water & Sanitation","method":"Bank Statement","desc":"Water & Sanitation \u2014 July 2024","notes":"","receiptName":null},{"id":"seed-exp-1044","date":"2024-07-15","amount":420.16,"category":"Laptop / Monitor","method":"Bank Statement","desc":"Laptop / Monitor \u2014 July 2024","notes":"","receiptName":null},{"id":"seed-exp-1045","date":"2024-07-15","amount":13000.0,"category":"House Rent (home office)","method":"Bank Statement","desc":"House Rent (home office) \u2014 July 2024","notes":"","receiptName":null},{"id":"seed-exp-1046","date":"2024-07-15","amount":1637.88,"category":"Insurance","method":"Bank Statement","desc":"Insurance \u2014 July 2024","notes":"","receiptName":null},{"id":"seed-exp-1047","date":"2024-07-15","amount":1199.0,"category":"Cellphone","method":"Bank Statement","desc":"Cellphone \u2014 July 2024","notes":"","receiptName":null},{"id":"seed-exp-1048","date":"2024-07-15","amount":6304.11,"category":"Vehicle Instalment","method":"Bank Statement","desc":"Vehicle Instalment \u2014 July 2024","notes":"","receiptName":null},{"id":"seed-exp-1049","date":"2024-07-15","amount":728.0,"category":"Wifi / Internet","method":"Bank Statement","desc":"Wifi / Internet \u2014 July 2024","notes":"","receiptName":null},{"id":"seed-exp-1050","date":"2024-07-15","amount":205.0,"category":"Hosting","method":"Bank Statement","desc":"Hosting \u2014 July 2024","notes":"","receiptName":null},{"id":"seed-exp-1051","date":"2024-07-15","amount":199.0,"category":"Microsoft Software","method":"Bank Statement","desc":"Microsoft Software \u2014 July 2024","notes":"","receiptName":null},{"id":"seed-exp-1052","date":"2024-07-15","amount":1100.0,"category":"Electricity","method":"Bank Statement","desc":"Electricity \u2014 July 2024","notes":"","receiptName":null},{"id":"seed-exp-1053","date":"2024-08-15","amount":147.65,"category":"Bank Charges","method":"Bank Statement","desc":"Bank Charges \u2014 August 2024","notes":"","receiptName":null},{"id":"seed-exp-1054","date":"2024-08-15","amount":800.58,"category":"Water & Sanitation","method":"Bank Statement","desc":"Water & Sanitation \u2014 August 2024","notes":"","receiptName":null},{"id":"seed-exp-1055","date":"2024-08-15","amount":420.16,"category":"Laptop / Monitor","method":"Bank Statement","desc":"Laptop / Monitor \u2014 August 2024","notes":"","receiptName":null},{"id":"seed-exp-1056","date":"2024-08-15","amount":13000.0,"category":"House Rent (home office)","method":"Bank Statement","desc":"House Rent (home office) \u2014 August 2024","notes":"","receiptName":null},{"id":"seed-exp-1057","date":"2024-08-15","amount":1637.88,"category":"Insurance","method":"Bank Statement","desc":"Insurance \u2014 August 2024","notes":"","receiptName":null},{"id":"seed-exp-1058","date":"2024-08-15","amount":1199.0,"category":"Cellphone","method":"Bank Statement","desc":"Cellphone \u2014 August 2024","notes":"","receiptName":null},{"id":"seed-exp-1059","date":"2024-08-15","amount":6304.11,"category":"Vehicle Instalment","method":"Bank Statement","desc":"Vehicle Instalment \u2014 August 2024","notes":"","receiptName":null},{"id":"seed-exp-1060","date":"2024-08-15","amount":728.0,"category":"Wifi / Internet","method":"Bank Statement","desc":"Wifi / Internet \u2014 August 2024","notes":"","receiptName":null},{"id":"seed-exp-1061","date":"2024-08-15","amount":205.0,"category":"Hosting","method":"Bank Statement","desc":"Hosting \u2014 August 2024","notes":"","receiptName":null},{"id":"seed-exp-1062","date":"2024-08-15","amount":199.0,"category":"Microsoft Software","method":"Bank Statement","desc":"Microsoft Software \u2014 August 2024","notes":"","receiptName":null},{"id":"seed-exp-1063","date":"2024-08-15","amount":1750.0,"category":"Electricity","method":"Bank Statement","desc":"Electricity \u2014 August 2024","notes":"","receiptName":null},{"id":"seed-exp-1064","date":"2024-08-15","amount":3499.0,"category":"Online Purchases for Business","method":"Bank Statement","desc":"Online Purchases for Business \u2014 August 2024","notes":"","receiptName":null},{"id":"seed-exp-1065","date":"2024-09-15","amount":184.12,"category":"Bank Charges","method":"Bank Statement","desc":"Bank Charges \u2014 September 2024","notes":"","receiptName":null},{"id":"seed-exp-1066","date":"2024-09-15","amount":778.48,"category":"Water & Sanitation","method":"Bank Statement","desc":"Water & Sanitation \u2014 September 2024","notes":"","receiptName":null},{"id":"seed-exp-1067","date":"2024-09-15","amount":4158.68,"category":"Motor Vehicle \u2013 Maintenance","method":"Bank Statement","desc":"Motor Vehicle \u2013 Maintenance \u2014 September 2024","notes":"","receiptName":null},{"id":"seed-exp-1068","date":"2024-09-15","amount":855.49,"category":"Laptop / Monitor","method":"Bank Statement","desc":"Laptop / Monitor \u2014 September 2024","notes":"","receiptName":null},{"id":"seed-exp-1069","date":"2024-09-15","amount":13000.0,"category":"House Rent (home office)","method":"Bank Statement","desc":"House Rent (home office) \u2014 September 2024","notes":"","receiptName":null},{"id":"seed-exp-1070","date":"2024-09-15","amount":1637.88,"category":"Insurance","method":"Bank Statement","desc":"Insurance \u2014 September 2024","notes":"","receiptName":null},{"id":"seed-exp-1071","date":"2024-09-15","amount":1199.0,"category":"Cellphone","method":"Bank Statement","desc":"Cellphone \u2014 September 2024","notes":"","receiptName":null},{"id":"seed-exp-1072","date":"2024-09-15","amount":6304.11,"category":"Vehicle Instalment","method":"Bank Statement","desc":"Vehicle Instalment \u2014 September 2024","notes":"","receiptName":null},{"id":"seed-exp-1073","date":"2024-09-15","amount":1159.0,"category":"Wifi / Internet","method":"Bank Statement","desc":"Wifi / Internet \u2014 September 2024","notes":"","receiptName":null},{"id":"seed-exp-1074","date":"2024-09-15","amount":205.0,"category":"Hosting","method":"Bank Statement","desc":"Hosting \u2014 September 2024","notes":"","receiptName":null},{"id":"seed-exp-1075","date":"2024-09-15","amount":199.0,"category":"Microsoft Software","method":"Bank Statement","desc":"Microsoft Software \u2014 September 2024","notes":"","receiptName":null},{"id":"seed-exp-1076","date":"2024-09-15","amount":1750.0,"category":"Electricity","method":"Bank Statement","desc":"Electricity \u2014 September 2024","notes":"","receiptName":null},{"id":"seed-exp-1077","date":"2024-09-15","amount":1451.0,"category":"Online Purchases for Business","method":"Bank Statement","desc":"Online Purchases for Business \u2014 September 2024","notes":"","receiptName":null},{"id":"seed-exp-1078","date":"2024-10-15","amount":114.8,"category":"Bank Charges","method":"Bank Statement","desc":"Bank Charges \u2014 October 2024","notes":"","receiptName":null},{"id":"seed-exp-1079","date":"2024-10-15","amount":960.89,"category":"Water & Sanitation","method":"Bank Statement","desc":"Water & Sanitation \u2014 October 2024","notes":"","receiptName":null},{"id":"seed-exp-1080","date":"2024-10-15","amount":855.49,"category":"Laptop / Monitor","method":"Bank Statement","desc":"Laptop / Monitor \u2014 October 2024","notes":"","receiptName":null},{"id":"seed-exp-1081","date":"2024-10-15","amount":13000.0,"category":"House Rent (home office)","method":"Bank Statement","desc":"House Rent (home office) \u2014 October 2024","notes":"","receiptName":null},{"id":"seed-exp-1082","date":"2024-10-15","amount":1637.88,"category":"Insurance","method":"Bank Statement","desc":"Insurance \u2014 October 2024","notes":"","receiptName":null},{"id":"seed-exp-1083","date":"2024-10-15","amount":1199.0,"category":"Cellphone","method":"Bank Statement","desc":"Cellphone \u2014 October 2024","notes":"","receiptName":null},{"id":"seed-exp-1084","date":"2024-10-15","amount":6304.11,"category":"Vehicle Instalment","method":"Bank Statement","desc":"Vehicle Instalment \u2014 October 2024","notes":"","receiptName":null},{"id":"seed-exp-1085","date":"2024-10-15","amount":1560.0,"category":"Wifi / Internet","method":"Bank Statement","desc":"Wifi / Internet \u2014 October 2024","notes":"","receiptName":null},{"id":"seed-exp-1086","date":"2024-10-15","amount":205.0,"category":"Hosting","method":"Bank Statement","desc":"Hosting \u2014 October 2024","notes":"","receiptName":null},{"id":"seed-exp-1087","date":"2024-10-15","amount":199.0,"category":"Microsoft Software","method":"Bank Statement","desc":"Microsoft Software \u2014 October 2024","notes":"","receiptName":null},{"id":"seed-exp-1088","date":"2024-10-15","amount":1750.0,"category":"Electricity","method":"Bank Statement","desc":"Electricity \u2014 October 2024","notes":"","receiptName":null},{"id":"seed-exp-1089","date":"2024-10-15","amount":896.0,"category":"Online Purchases for Business","method":"Bank Statement","desc":"Online Purchases for Business \u2014 October 2024","notes":"","receiptName":null},{"id":"seed-exp-1090","date":"2024-11-15","amount":103.69,"category":"Bank Charges","method":"Bank Statement","desc":"Bank Charges \u2014 November 2024","notes":"","receiptName":null},{"id":"seed-exp-1091","date":"2024-11-15","amount":1234.33,"category":"Water & Sanitation","method":"Bank Statement","desc":"Water & Sanitation \u2014 November 2024","notes":"","receiptName":null},{"id":"seed-exp-1092","date":"2024-11-15","amount":855.49,"category":"Laptop / Monitor","method":"Bank Statement","desc":"Laptop / Monitor \u2014 November 2024","notes":"","receiptName":null},{"id":"seed-exp-1093","date":"2024-11-15","amount":13000.0,"category":"House Rent (home office)","method":"Bank Statement","desc":"House Rent (home office) \u2014 November 2024","notes":"","receiptName":null},{"id":"seed-exp-1094","date":"2024-11-15","amount":1637.88,"category":"Insurance","method":"Bank Statement","desc":"Insurance \u2014 November 2024","notes":"","receiptName":null},{"id":"seed-exp-1095","date":"2024-11-15","amount":1199.0,"category":"Cellphone","method":"Bank Statement","desc":"Cellphone \u2014 November 2024","notes":"","receiptName":null},{"id":"seed-exp-1096","date":"2024-11-15","amount":6304.11,"category":"Vehicle Instalment","method":"Bank Statement","desc":"Vehicle Instalment \u2014 November 2024","notes":"","receiptName":null},{"id":"seed-exp-1097","date":"2024-11-15","amount":827.0,"category":"Wifi / Internet","method":"Bank Statement","desc":"Wifi / Internet \u2014 November 2024","notes":"","receiptName":null},{"id":"seed-exp-1098","date":"2024-11-15","amount":274.0,"category":"Hosting","method":"Bank Statement","desc":"Hosting \u2014 November 2024","notes":"","receiptName":null},{"id":"seed-exp-1099","date":"2024-11-15","amount":199.0,"category":"Microsoft Software","method":"Bank Statement","desc":"Microsoft Software \u2014 November 2024","notes":"","receiptName":null},{"id":"seed-exp-1100","date":"2024-11-15","amount":2200.0,"category":"Electricity","method":"Bank Statement","desc":"Electricity \u2014 November 2024","notes":"","receiptName":null},{"id":"seed-exp-1101","date":"2024-11-15","amount":4187.0,"category":"Online Purchases for Business","method":"Bank Statement","desc":"Online Purchases for Business \u2014 November 2024","notes":"","receiptName":null},{"id":"seed-exp-1102","date":"2024-12-15","amount":98.65,"category":"Bank Charges","method":"Bank Statement","desc":"Bank Charges \u2014 December 2024","notes":"","receiptName":null},{"id":"seed-exp-1103","date":"2024-12-15","amount":1435.33,"category":"Water & Sanitation","method":"Bank Statement","desc":"Water & Sanitation \u2014 December 2024","notes":"","receiptName":null},{"id":"seed-exp-1104","date":"2024-12-15","amount":903.0,"category":"Motor Vehicle \u2013 Maintenance","method":"Bank Statement","desc":"Motor Vehicle \u2013 Maintenance \u2014 December 2024","notes":"","receiptName":null},{"id":"seed-exp-1105","date":"2024-12-15","amount":855.49,"category":"Laptop / Monitor","method":"Bank Statement","desc":"Laptop / Monitor \u2014 December 2024","notes":"","receiptName":null},{"id":"seed-exp-1106","date":"2024-12-15","amount":13000.0,"category":"House Rent (home office)","method":"Bank Statement","desc":"House Rent (home office) \u2014 December 2024","notes":"","receiptName":null},{"id":"seed-exp-1107","date":"2024-12-15","amount":1637.88,"category":"Insurance","method":"Bank Statement","desc":"Insurance \u2014 December 2024","notes":"","receiptName":null},{"id":"seed-exp-1108","date":"2024-12-15","amount":1199.0,"category":"Cellphone","method":"Bank Statement","desc":"Cellphone \u2014 December 2024","notes":"","receiptName":null},{"id":"seed-exp-1109","date":"2024-12-15","amount":6304.11,"category":"Vehicle Instalment","method":"Bank Statement","desc":"Vehicle Instalment \u2014 December 2024","notes":"","receiptName":null},{"id":"seed-exp-1110","date":"2024-12-15","amount":927.0,"category":"Wifi / Internet","method":"Bank Statement","desc":"Wifi / Internet \u2014 December 2024","notes":"","receiptName":null},{"id":"seed-exp-1111","date":"2024-12-15","amount":284.0,"category":"Hosting","method":"Bank Statement","desc":"Hosting \u2014 December 2024","notes":"","receiptName":null},{"id":"seed-exp-1112","date":"2024-12-15","amount":199.0,"category":"Microsoft Software","method":"Bank Statement","desc":"Microsoft Software \u2014 December 2024","notes":"","receiptName":null},{"id":"seed-exp-1113","date":"2024-12-15","amount":3800.0,"category":"Electricity","method":"Bank Statement","desc":"Electricity \u2014 December 2024","notes":"","receiptName":null},{"id":"seed-exp-1114","date":"2024-12-15","amount":350.0,"category":"Online Purchases for Business","method":"Bank Statement","desc":"Online Purchases for Business \u2014 December 2024","notes":"","receiptName":null},{"id":"seed-exp-1115","date":"2025-01-15","amount":148.42,"category":"Bank Charges","method":"Bank Statement","desc":"Bank Charges \u2014 January 2025","notes":"","receiptName":null},{"id":"seed-exp-1116","date":"2025-01-15","amount":1534.17,"category":"Water & Sanitation","method":"Bank Statement","desc":"Water & Sanitation \u2014 January 2025","notes":"","receiptName":null},{"id":"seed-exp-1117","date":"2025-01-15","amount":855.49,"category":"Laptop / Monitor","method":"Bank Statement","desc":"Laptop / Monitor \u2014 January 2025","notes":"","receiptName":null},{"id":"seed-exp-1118","date":"2025-01-15","amount":13000.0,"category":"House Rent (home office)","method":"Bank Statement","desc":"House Rent (home office) \u2014 January 2025","notes":"","receiptName":null},{"id":"seed-exp-1119","date":"2025-01-15","amount":1637.88,"category":"Insurance","method":"Bank Statement","desc":"Insurance \u2014 January 2025","notes":"","receiptName":null},{"id":"seed-exp-1120","date":"2025-01-15","amount":1199.0,"category":"Cellphone","method":"Bank Statement","desc":"Cellphone \u2014 January 2025","notes":"","receiptName":null},{"id":"seed-exp-1121","date":"2025-01-15","amount":6304.11,"category":"Vehicle Instalment","method":"Bank Statement","desc":"Vehicle Instalment \u2014 January 2025","notes":"","receiptName":null},{"id":"seed-exp-1122","date":"2025-01-15","amount":728.0,"category":"Wifi / Internet","method":"Bank Statement","desc":"Wifi / Internet \u2014 January 2025","notes":"","receiptName":null},{"id":"seed-exp-1123","date":"2025-01-15","amount":383.0,"category":"Hosting","method":"Bank Statement","desc":"Hosting \u2014 January 2025","notes":"","receiptName":null},{"id":"seed-exp-1124","date":"2025-01-15","amount":199.0,"category":"Microsoft Software","method":"Bank Statement","desc":"Microsoft Software \u2014 January 2025","notes":"","receiptName":null},{"id":"seed-exp-1125","date":"2025-01-15","amount":2213.0,"category":"Electricity","method":"Bank Statement","desc":"Electricity \u2014 January 2025","notes":"","receiptName":null},{"id":"seed-exp-1126","date":"2025-01-15","amount":3514.0,"category":"Online Purchases for Business","method":"Bank Statement","desc":"Online Purchases for Business \u2014 January 2025","notes":"","receiptName":null},{"id":"seed-exp-1127","date":"2025-02-15","amount":95.0,"category":"Bank Charges","method":"Bank Statement","desc":"Bank Charges \u2014 February 2025","notes":"","receiptName":null},{"id":"seed-exp-1128","date":"2025-02-15","amount":855.49,"category":"Laptop / Monitor","method":"Bank Statement","desc":"Laptop / Monitor \u2014 February 2025","notes":"","receiptName":null},{"id":"seed-exp-1129","date":"2025-02-15","amount":13000.0,"category":"House Rent (home office)","method":"Bank Statement","desc":"House Rent (home office) \u2014 February 2025","notes":"","receiptName":null},{"id":"seed-exp-1130","date":"2025-02-15","amount":1637.88,"category":"Insurance","method":"Bank Statement","desc":"Insurance \u2014 February 2025","notes":"","receiptName":null},{"id":"seed-exp-1131","date":"2025-02-15","amount":1199.0,"category":"Cellphone","method":"Bank Statement","desc":"Cellphone \u2014 February 2025","notes":"","receiptName":null},{"id":"seed-exp-1132","date":"2025-02-15","amount":6304.11,"category":"Vehicle Instalment","method":"Bank Statement","desc":"Vehicle Instalment \u2014 February 2025","notes":"","receiptName":null},{"id":"seed-exp-1133","date":"2025-02-15","amount":777.0,"category":"Wifi / Internet","method":"Bank Statement","desc":"Wifi / Internet \u2014 February 2025","notes":"","receiptName":null},{"id":"seed-exp-1134","date":"2025-02-15","amount":429.71,"category":"Hosting","method":"Bank Statement","desc":"Hosting \u2014 February 2025","notes":"","receiptName":null},{"id":"seed-exp-1135","date":"2025-02-15","amount":199.0,"category":"Microsoft Software","method":"Bank Statement","desc":"Microsoft Software \u2014 February 2025","notes":"","receiptName":null},{"id":"seed-exp-1136","date":"2025-02-15","amount":3200.0,"category":"Electricity","method":"Bank Statement","desc":"Electricity \u2014 February 2025","notes":"","receiptName":null},{"id":"seed-exp-1137","date":"2025-02-15","amount":523.0,"category":"Online Purchases for Business","method":"Bank Statement","desc":"Online Purchases for Business \u2014 February 2025","notes":"","receiptName":null}];
 const seedPayments=[{"id":"seed-pay-2024-03","type":"invoice","invoiceId":"","invoiceNumber":"","customer":"Various Clients","employer":"","salaryType":"","paye":0,"uif":0,"amount":72300.0,"date":"2024-03-01","method":"EFT","ref":"Income March 2024","notes":"Services rendered income for March 2024","proofName":null},{"id":"seed-pay-2024-04","type":"invoice","invoiceId":"","invoiceNumber":"","customer":"Various Clients","employer":"","salaryType":"","paye":0,"uif":0,"amount":48500.0,"date":"2024-04-01","method":"EFT","ref":"Income April 2024","notes":"Services rendered income for April 2024","proofName":null},{"id":"seed-pay-2024-05","type":"invoice","invoiceId":"","invoiceNumber":"","customer":"Various Clients","employer":"","salaryType":"","paye":0,"uif":0,"amount":47050.0,"date":"2024-05-01","method":"EFT","ref":"Income May 2024","notes":"Services rendered income for May 2024","proofName":null},{"id":"seed-pay-2024-06","type":"invoice","invoiceId":"","invoiceNumber":"","customer":"Various Clients","employer":"","salaryType":"","paye":0,"uif":0,"amount":47650.0,"date":"2024-06-01","method":"EFT","ref":"Income June 2024","notes":"Services rendered income for June 2024","proofName":null},{"id":"seed-pay-2024-07","type":"invoice","invoiceId":"","invoiceNumber":"","customer":"Various Clients","employer":"","salaryType":"","paye":0,"uif":0,"amount":47050.0,"date":"2024-07-01","method":"EFT","ref":"Income July 2024","notes":"Services rendered income for July 2024","proofName":null},{"id":"seed-pay-2024-08","type":"invoice","invoiceId":"","invoiceNumber":"","customer":"Various Clients","employer":"","salaryType":"","paye":0,"uif":0,"amount":55500.0,"date":"2024-08-01","method":"EFT","ref":"Income August 2024","notes":"Services rendered income for August 2024","proofName":null},{"id":"seed-pay-2024-09","type":"invoice","invoiceId":"","invoiceNumber":"","customer":"Various Clients","employer":"","salaryType":"","paye":0,"uif":0,"amount":66438.0,"date":"2024-09-01","method":"EFT","ref":"Income September 2024","notes":"Services rendered income for September 2024","proofName":null},{"id":"seed-pay-2024-10","type":"invoice","invoiceId":"","invoiceNumber":"","customer":"Various Clients","employer":"","salaryType":"","paye":0,"uif":0,"amount":69039.0,"date":"2024-10-01","method":"EFT","ref":"Income October 2024","notes":"Services rendered income for October 2024","proofName":null},{"id":"seed-pay-2024-11","type":"invoice","invoiceId":"","invoiceNumber":"","customer":"Various Clients","employer":"","salaryType":"","paye":0,"uif":0,"amount":75178.5,"date":"2024-11-01","method":"EFT","ref":"Income November 2024","notes":"Services rendered income for November 2024","proofName":null},{"id":"seed-pay-2024-12","type":"invoice","invoiceId":"","invoiceNumber":"","customer":"Various Clients","employer":"","salaryType":"","paye":0,"uif":0,"amount":70488.78,"date":"2024-12-01","method":"EFT","ref":"Income December 2024","notes":"Services rendered income for December 2024","proofName":null},{"id":"seed-pay-2025-01","type":"invoice","invoiceId":"","invoiceNumber":"","customer":"Various Clients","employer":"","salaryType":"","paye":0,"uif":0,"amount":68407.81,"date":"2025-01-01","method":"EFT","ref":"Income January 2025","notes":"Services rendered income for January 2025","proofName":null},{"id":"seed-pay-2025-02","type":"invoice","invoiceId":"","invoiceNumber":"","customer":"Various Clients","employer":"","salaryType":"","paye":0,"uif":0,"amount":70000.0,"date":"2025-02-01","method":"EFT","ref":"Income February 2025","notes":"Services rendered income for February 2025","proofName":null}];
+
+// ============================================================
+//  TAX PAYMENTS
+// ============================================================
+let editingTaxPayId = null;
+
+const TAX_PAY_LABELS = {
+  provisional_1: 'Provisional Tax — 1st Payment',
+  provisional_2: 'Provisional Tax — 2nd Payment',
+  provisional_3: 'Provisional Tax — Top-up',
+  assessment:    'Income Tax Assessment',
+  penalty:       'Penalty / Interest',
+  other:         'Other SARS Payment'
+};
+
+function openTaxPaymentModal(id) {
+  editingTaxPayId = id || null;
+  const tp = id ? (state.taxPayments||[]).find(x=>x.id===id) : null;
+  // Sync FY from the expenses page selector
+  const fyVal = document.getElementById('tax-year-select')?.value || '2026';
+  const sel = document.getElementById('tp-fy');
+  if (sel) sel.value = tp ? tp.fy : fyVal;
+  document.getElementById('tp-amount').value = tp ? tp.amount : '';
+  document.getElementById('tp-date').value = tp ? tp.date : new Date().toISOString().split('T')[0];
+  document.getElementById('tp-type').value = tp ? tp.type : 'provisional_1';
+  document.getElementById('tp-ref').value = tp ? tp.ref || '' : '';
+  document.getElementById('tp-notes').value = tp ? tp.notes || '' : '';
+  document.getElementById('tax-pay-modal-title').textContent = id ? 'Edit Tax Payment' : 'Record Tax Payment';
+  openModal('tax-payment-modal');
+}
+
+function saveTaxPayment() {
+  const amount = parseFloat(document.getElementById('tp-amount').value);
+  const date = document.getElementById('tp-date').value;
+  const fy = document.getElementById('tp-fy').value;
+  if (!amount || amount <= 0 || !date || !fy) {
+    toast('Please fill in all required fields', 'error'); return;
+  }
+  const entry = {
+    id: editingTaxPayId || Date.now().toString(),
+    fy,
+    amount,
+    date,
+    type: document.getElementById('tp-type').value,
+    ref: document.getElementById('tp-ref').value,
+    notes: document.getElementById('tp-notes').value
+  };
+  if (!state.taxPayments) state.taxPayments = [];
+  const idx = state.taxPayments.findIndex(x => x.id === entry.id);
+  if (idx >= 0) state.taxPayments[idx] = entry;
+  else state.taxPayments.push(entry);
+  save();
+  closeModal('tax-payment-modal');
+  renderExpenses();
+  renderDashboard();
+  toast(editingTaxPayId ? 'Tax payment updated ✓' : 'Tax payment recorded ✓', 'success');
+  editingTaxPayId = null;
+}
+
+function deleteTaxPayment(id) {
+  if (!confirm('Delete this tax payment record?')) return;
+  state.taxPayments = (state.taxPayments || []).filter(x => x.id !== id);
+  save(); renderExpenses(); renderDashboard();
+  toast('Tax payment deleted', 'error');
+}
 
 // ============================================================
 //  INIT — auth gate + share URL handling
