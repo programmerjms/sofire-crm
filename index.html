@@ -1384,20 +1384,38 @@ function editInvoice(id){
     updatePreview();
   },50);
 }
-function printInvoice(){
-  // Build the full printable invoice HTML matching the PDF exactly
+async function printInvoice(){
   const inv=collectInvoiceData();
   const s=state.settings;
-  const html=buildInvoiceHTML(inv,s);
-  const win=window.open('','_blank');
-  win.document.write(`<!DOCTYPE html><html><head><title>Invoice ${inv.number}</title>
-    <style>
-      *{box-sizing:border-box;margin:0;padding:0}
-      body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;background:#fff;color:#1a1a1a;padding:40px;font-size:12px}
-      @page{margin:20mm}
-      @media print{body{padding:0}}
-    </style></head><body>${html}</body></html>`);
-  win.document.close();setTimeout(()=>{win.print();},700);
+  // Show loading state
+  const btn = document.querySelector('[onclick="printInvoice()"]');
+  if(btn){ btn.textContent='⏳ Generating PDF...'; btn.disabled=true; }
+  try {
+    const pdfBase64 = await generateInvoicePDF(inv, s);
+    // Convert base64 to blob and open in new tab
+    const byteChars = atob(pdfBase64);
+    const byteArr = new Uint8Array(byteChars.length);
+    for(let i=0;i<byteChars.length;i++) byteArr[i]=byteChars.charCodeAt(i);
+    const blob = new Blob([byteArr], {type:'application/pdf'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Invoice-${inv.number}.pdf`;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
+    toast('PDF downloaded ✓','success');
+  } catch(e) {
+    toast('PDF generation failed: '+e.message,'error');
+    // Fallback to browser print
+    const html=buildInvoiceHTML(inv,s);
+    const win=window.open('','_blank');
+    win.document.write(`<!DOCTYPE html><html><head><title>Invoice ${inv.number}</title>
+      <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;background:#fff;color:#1a1a1a;padding:40px;font-size:12px}@page{margin:20mm}@media print{body{padding:0}}</style>
+      </head><body>${html}</body></html>`);
+    win.document.close();setTimeout(()=>{win.print();},700);
+  } finally {
+    if(btn){ btn.textContent='🖨 Print / PDF'; btn.disabled=false; }
+  }
 }
 // Shared function to build the full printable invoice HTML (exact PDF match)
 function buildInvoiceHTML(inv,s){
@@ -1623,7 +1641,7 @@ function prefillSendModal(inv, type) {
   } else {
     document.getElementById('send-subject').value = `Invoice ${inv.number} from ${s.company}`;
     document.getElementById('send-message').value = `Dear ${inv.custName || 'Client'},\n\nPlease find your invoice ${inv.number} for R${parseFloat(inv.total || 0).toFixed(2)} attached.\n\nDue date: ${inv.due ? new Date(inv.due + 'T00:00:00').toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }) : '30 days'}\n\nPayment details:\nBank: ${s.bank || 'FNB/RMB'}\nAccount: ${s.accNum || '63095872032'}\nBranch: ${s.branch || '250655'}\n\nThank you for your business!\n\n${s.owner || s.company}\n${s.phone || ''}\n${s.email || ''}`;
-    document.getElementById('send-attach-label').textContent = `Invoice ${inv.number} (HTML) will be attached`;
+    document.getElementById('send-attach-label').textContent = `Invoice ${inv.number}.pdf will be generated and attached`;
   }
   document.getElementById('send-status-bar').style.display = 'none';
   openModal('send-modal');
@@ -1643,6 +1661,96 @@ function setSendStatus(msg, ok) {
   bar.style.color = ok ? 'var(--green)' : 'var(--accent)';
   bar.textContent = msg;
 }
+// Load an external script once and cache it
+const _loadedScripts = {};
+function loadScript(url) {
+  if (_loadedScripts[url]) return _loadedScripts[url];
+  _loadedScripts[url] = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = url; s.onload = resolve; s.onerror = () => reject(new Error('Failed to load: ' + url));
+    document.head.appendChild(s);
+  });
+  return _loadedScripts[url];
+}
+
+async function generateInvoicePDF(inv, s) {
+  // Load jsPDF and html2canvas from CDN
+  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+
+  // Build the invoice HTML into a hidden off-screen container
+  const container = document.createElement('div');
+  container.style.cssText = [
+    'position:fixed', 'left:-9999px', 'top:0',
+    'width:794px',          // A4 at 96dpi ≈ 794px
+    'background:#ffffff',
+    'font-family:Helvetica Neue,Arial,sans-serif',
+    'font-size:12px', 'color:#1a1a1a',
+    'padding:40px 48px',
+    'box-sizing:border-box',
+    'z-index:-1'
+  ].join(';');
+  container.innerHTML = buildInvoiceHTML(inv, s);
+  document.body.appendChild(container);
+
+  // Wait a frame for fonts/images to settle
+  await new Promise(r => setTimeout(r, 300));
+
+  try {
+    const canvas = await html2canvas(container, {
+      scale: 2,           // 2× for crisp text
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+      width: 794,
+      windowWidth: 794
+    });
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'px', format: 'a4', orientation: 'portrait' });
+
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const imgW = canvas.width;
+    const imgH = canvas.height;
+
+    // Scale to fit page width, then paginate if content is taller than one page
+    const ratio = pageW / imgW;
+    const scaledH = imgH * ratio;
+
+    const imgData = canvas.toDataURL('image/jpeg', 0.92);
+
+    if (scaledH <= pageH) {
+      // Fits on one page
+      pdf.addImage(imgData, 'JPEG', 0, 0, pageW, scaledH);
+    } else {
+      // Multi-page: slice the canvas into page-height chunks
+      let yOffset = 0;
+      while (yOffset < imgH) {
+        if (yOffset > 0) pdf.addPage();
+        const sliceH = Math.min(pageH / ratio, imgH - yOffset);
+        // Create a slice canvas
+        const slice = document.createElement('canvas');
+        slice.width = imgW;
+        slice.height = sliceH * 2; // accounting for scale:2
+        const ctx = slice.getContext('2d');
+        ctx.drawImage(canvas, 0, yOffset * 2, imgW, sliceH * 2, 0, 0, imgW, sliceH * 2);
+        const sliceData = slice.toDataURL('image/jpeg', 0.92);
+        pdf.addImage(sliceData, 'JPEG', 0, 0, pageW, sliceH * ratio);
+        yOffset += sliceH;
+      }
+    }
+
+    // Return as base64 string (without the data: prefix)
+    const pdfOutput = pdf.output('datauristring');
+    return pdfOutput.split(',')[1]; // base64 only
+
+  } finally {
+    document.body.removeChild(container);
+  }
+}
+
 async function sendViaSMTP() {
   const btn = document.getElementById('send-smtp-btn');
   const to = document.getElementById('send-to-email').value.trim();
@@ -1661,15 +1769,18 @@ async function sendViaSMTP() {
       const b64 = btoa(unescape(encodeURIComponent(csv)));
       attachments.push({ filename: `expense-report-${new Date().toISOString().split('T')[0]}.csv`, data: b64, contentType: 'text/csv' });
     } else {
-      // Build invoice HTML attachment
+      // Build invoice PDF attachment using jsPDF + html2canvas
       const inv = state.currentSendInvId && state.currentSendInvId !== 'unsaved'
         ? state.invoices.find(i => i.id === state.currentSendInvId)
         : collectInvoiceData();
-      const invHtml = buildInvoiceEmailHTML(inv, s);
-      const b64 = btoa(unescape(encodeURIComponent(invHtml)));
-      attachments.push({ filename: `Invoice-${inv.number}.html`, data: b64, contentType: 'text/html' });
-      // Also build rich HTML body
       var htmlBody = buildEmailBody(inv, s, message);
+      btn.textContent = '⏳ Generating PDF...';
+      const pdfBase64 = await generateInvoicePDF(inv, s);
+      attachments.push({
+        filename: `Invoice-${inv.number}.pdf`,
+        data: pdfBase64,
+        contentType: 'application/pdf'
+      });
     }
     const payload = {
       to, toName, subject, message,
