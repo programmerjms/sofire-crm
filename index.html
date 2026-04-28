@@ -327,12 +327,75 @@ textarea{resize:vertical;min-height:70px}
 
 <!-- ===================== DASHBOARD ===================== -->
 <div class="content page active" id="page-dashboard">
-  <div class="stats-grid">
-    <div class="stat-card green"><div class="stat-label">Total Income</div><div class="stat-value" id="stat-earned">R0</div><div class="stat-change">Invoices + salary combined</div></div>
-    <div class="stat-card yellow"><div class="stat-label">Outstanding</div><div class="stat-value" id="stat-outstanding">R0</div><div class="stat-change">Pending invoices</div></div>
-    <div class="stat-card red"><div class="stat-label">Total Expenses</div><div class="stat-value" id="stat-expenses">R0</div><div class="stat-change">This financial year</div></div>
-    <div class="stat-card purple"><div class="stat-label">Net Profit</div><div class="stat-value" id="stat-profit">R0</div><div class="stat-change">Income minus expenses</div></div>
+
+  <!-- FY selector + logout -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+    <div style="display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 12px">
+      <span style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.8px">Tax Year</span>
+      <select id="dash-fy-select" onchange="renderDashboard()" style="background:transparent;border:none;color:var(--text);font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;outline:none;cursor:pointer;padding:0">
+        <option value="all">All Years</option>
+        <option value="2025">FY 2024/2025</option>
+        <option value="2026">FY 2025/2026 (Mar 2024–Feb 2025)</option>
+        <option value="2027">FY 2026/2027 (Mar 2025–Feb 2026)</option>
+        <option value="2028">FY 2027/2028</option>
+      </select>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="doLogout()" style="color:var(--accent);gap:6px">
+      <span>⎋</span> Sign Out
+    </button>
   </div>
+
+  <!-- MAIN STAT CARDS — filtered by FY -->
+  <div class="stats-grid" style="margin-bottom:18px">
+    <div class="stat-card green">
+      <div class="stat-label">Total Income</div>
+      <div class="stat-value" id="stat-earned">R0</div>
+      <div class="stat-change" id="stat-earned-sub">Invoices + salary combined</div>
+    </div>
+    <div class="stat-card yellow">
+      <div class="stat-label">Outstanding</div>
+      <div class="stat-value" id="stat-outstanding">R0</div>
+      <div class="stat-change">Pending invoices</div>
+    </div>
+    <div class="stat-card red">
+      <div class="stat-label">Total Expenses</div>
+      <div class="stat-value" id="stat-expenses">R0</div>
+      <div class="stat-change" id="stat-expenses-sub">This financial year</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="stat-label">Net Profit</div>
+      <div class="stat-value" id="stat-profit">R0</div>
+      <div class="stat-change" id="stat-profit-sub">Income minus expenses</div>
+    </div>
+  </div>
+
+  <!-- YEARLY TOTALS ROW — always all-time, not filtered -->
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-header">
+      <span class="card-title">📅 Yearly Totals — All Financial Years</span>
+      <button class="btn btn-ghost btn-sm" onclick="nav('payments')">Income detail →</button>
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:10px 14px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace;font-weight:400;border-bottom:1px solid var(--border)">Financial Year</th>
+            <th style="text-align:right;padding:10px 14px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace;font-weight:400;border-bottom:1px solid var(--border)">Gross Income</th>
+            <th style="text-align:right;padding:10px 14px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace;font-weight:400;border-bottom:1px solid var(--border)">Total Expenses</th>
+            <th style="text-align:right;padding:10px 14px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace;font-weight:400;border-bottom:1px solid var(--border)">Taxable Income</th>
+            <th style="text-align:right;padding:10px 14px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace;font-weight:400;border-bottom:1px solid var(--border)">Est. Tax</th>
+            <th style="text-align:right;padding:10px 14px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace;font-weight:400;border-bottom:1px solid var(--border)">Net Profit</th>
+            <th style="text-align:right;padding:10px 14px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace;font-weight:400;border-bottom:1px solid var(--border)">Eff. Rate</th>
+          </tr>
+        </thead>
+        <tbody id="dash-yearly-tbody">
+          <tr><td colspan="7" style="padding:24px;text-align:center;color:var(--text3)">No data yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- BOTTOM ROW: Recent invoices + right column -->
   <div class="two-col">
     <div class="card">
       <div class="card-header"><span class="card-title">Recent Invoices</span><button class="btn btn-ghost btn-sm" onclick="nav('invoices')">View all</button></div>
@@ -350,17 +413,21 @@ textarea{resize:vertical;min-height:70px}
           <button class="btn btn-ghost" style="justify-content:center" onclick="openPaymentModal()">💳 Record Income</button>
           <button class="btn btn-ghost" style="justify-content:center" onclick="nav('expenses')">📊 Add Expense</button>
           <button class="btn btn-ghost" style="justify-content:center" onclick="exportData()">⬇ Export Backup</button>
+          <button class="btn btn-ghost" style="justify-content:center;color:var(--accent)" onclick="doLogout()">⎋ Sign Out</button>
         </div>
       </div>
       <div class="card">
-        <div class="card-header"><span class="card-title">Tax Summary (ZA)</span></div>
+        <div class="card-header">
+          <span class="card-title">Tax Summary</span>
+          <span style="font-size:11px;color:var(--text3)" id="dash-tax-period-lbl">Current FY</span>
+        </div>
         <div style="padding:14px">
           <div class="tax-row"><span class="tax-label">Gross Income</span><span class="tax-val" id="tax-income">R0</span></div>
           <div class="tax-row"><span class="tax-label">Total Expenses</span><span class="tax-val" id="tax-exp">R0</span></div>
           <div class="tax-row highlight"><span class="tax-label">Taxable Income</span><span class="tax-val" id="tax-taxable">R0</span></div>
-          <div class="tax-row"><span class="tax-label">Est. Income Tax (SARS)</span><span class="tax-val" id="tax-sars">R0</span></div>
-
-          <div style="margin-top:10px"><button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center" onclick="nav('expenses')">View Full Tax Report</button></div>
+          <div class="tax-row"><span class="tax-label">Est. Income Tax</span><span class="tax-val" id="tax-sars">R0</span></div>
+          <div class="tax-row"><span class="tax-label">Monthly Set-Aside</span><span class="tax-val" style="color:var(--yellow)" id="tax-monthly">R0</span></div>
+          <div style="margin-top:10px"><button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center" onclick="nav('payments')">View Income & Tax →</button></div>
         </div>
       </div>
     </div>
@@ -1628,30 +1695,139 @@ function removeLogo(){
 // ============================================================
 function renderDashboard(){
   const s=state.settings;
-  const invEarned=state.payments.filter(p=>p.type!=='salary').reduce((a,p)=>a+parseFloat(p.amount||0),0);
-  const salEarned=state.payments.filter(p=>p.type==='salary').reduce((a,p)=>a+parseFloat(p.amount||0),0);
-  const payeCredit=state.payments.filter(p=>p.type==='salary').reduce((a,p)=>a+parseFloat(p.paye||0),0);
-  const earned=invEarned+salEarned;
-  const pending=state.invoices.filter(i=>i.status==='pending').reduce((a,i)=>a+parseFloat(i.total||0),0);
-  const expTotal=state.expenses.reduce((a,e)=>a+parseFloat(e.amount||0),0);
-  const profit=earned-expTotal;
-  const fmt=v=>'R'+Math.abs(v).toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
-  document.getElementById('stat-earned').textContent=fmt(earned);
-  document.getElementById('stat-outstanding').textContent=fmt(pending);
-  document.getElementById('stat-expenses').textContent=fmt(expTotal);
-  document.getElementById('stat-profit').textContent=(profit<0?'-':'')+fmt(profit);
-  document.getElementById('stat-profit').style.color=profit<0?'var(--accent)':'var(--green)';
+  const fyVal=document.getElementById('dash-fy-select')?.value||'all';
+  const fmt=v=>'R'+Math.abs(parseFloat(v||0)).toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fmtSign=v=>(v<0?'-':'')+fmt(v);
 
-  // Tax quick view — salary + invoice income combined
+  // Helper: check if date falls in a specific FY
+  const fyFilter=(dateStr,fy)=>{
+    if(fy==='all')return true;
+    const d=new Date(dateStr);
+    const {start,end}=getFYDates(parseInt(fy));
+    return d>=start&&d<end;
+  };
+
+  // ── Filtered stats (by selected FY)
+  const fyPays=state.payments.filter(p=>fyFilter(p.date,fyVal));
+  const fyExps=state.expenses.filter(e=>fyFilter(e.date,fyVal));
+  const invEarned=fyPays.filter(p=>p.type!=='salary').reduce((a,p)=>a+parseFloat(p.amount||0),0);
+  const salEarned=fyPays.filter(p=>p.type==='salary').reduce((a,p)=>a+parseFloat(p.amount||0),0);
+  const payeCredit=fyPays.filter(p=>p.type==='salary').reduce((a,p)=>a+parseFloat(p.paye||0),0);
+  const earned=invEarned+salEarned;
+  const expTotal=fyExps.reduce((a,e)=>a+parseFloat(e.amount||0),0);
+  const profit=earned-expTotal;
+  const pending=state.invoices.filter(i=>i.status==='pending').reduce((a,i)=>a+parseFloat(i.total||0),0);
+
+  const periodLbl=fyVal==='all'?'All time':`FY ${parseInt(fyVal)-1}/${fyVal}`;
+  const setEl=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+
+  setEl('stat-earned',fmt(earned));
+  setEl('stat-earned-sub',fyVal==='all'?'All time — invoices + salary':periodLbl);
+  setEl('stat-outstanding',fmt(pending));
+  setEl('stat-expenses',fmt(expTotal));
+  setEl('stat-expenses-sub',fyVal==='all'?'All time':periodLbl);
+  document.getElementById('stat-profit').textContent=fmtSign(profit);
+  document.getElementById('stat-profit').style.color=profit<0?'var(--accent)':'var(--green)';
+  setEl('stat-profit-sub',fyVal==='all'?'All time':periodLbl);
+  setEl('dash-tax-period-lbl',periodLbl);
+
+  // ── Tax summary (filtered FY)
   const taxable=Math.max(0,earned-expTotal);
   const grossTax=calcSARSTax(taxable);
-  const tax=Math.max(0,grossTax-payeCredit); // subtract PAYE already withheld
-  document.getElementById('tax-income').textContent=fmt(earned);
-  document.getElementById('tax-exp').textContent=fmt(expTotal);
-  document.getElementById('tax-taxable').textContent=fmt(taxable);
-  document.getElementById('tax-sars').textContent=fmt(tax)+(payeCredit>0?' (after PAYE)':'');
+  const tax=Math.max(0,grossTax-payeCredit);
+  setEl('tax-income',fmt(earned));
+  setEl('tax-exp',fmt(expTotal));
+  setEl('tax-taxable',fmt(taxable));
+  setEl('tax-sars',fmt(tax)+(payeCredit>0?' (after PAYE)':''));
+  setEl('tax-monthly',fmt(tax/12)+'/mo');
 
+  // ── Auto-select best FY on first load
+  const sel=document.getElementById('dash-fy-select');
+  if(sel&&sel.value==='all'&&state.payments.length>0){
+    // Find which FY has the most payments
+    const fyStart=s.fyStart||3;
+    const now=new Date();
+    const candidates=[2025,2026,2027,2028];
+    let bestFY=null,bestCount=0;
+    candidates.forEach(fy=>{
+      const {start,end}=getFYDates(fy);
+      const cnt=state.payments.filter(p=>{const d=new Date(p.date);return d>=start&&d<end;}).length;
+      if(cnt>bestCount){bestCount=cnt;bestFY=fy;}
+    });
+    if(bestFY){sel.value=String(bestFY);renderDashboard();return;}
+  }
 
+  // ── YEARLY TOTALS TABLE — always all-time across every FY
+  const allFYs=[];
+  // Detect which FYs have any data
+  const allDates=[...state.payments.map(p=>p.date),...state.expenses.map(e=>e.date)].filter(Boolean);
+  if(allDates.length){
+    const fyStart=s.fyStart||3;
+    const minYear=Math.min(...allDates.map(d=>parseInt(d.split('-')[0])));
+    const maxYear=Math.max(...allDates.map(d=>parseInt(d.split('-')[0])));
+    // FY year = year when the FY ends (e.g. FY2026 = Mar2025–Feb2026, ends in 2026)
+    for(let fy=minYear+1;fy<=maxYear+2;fy++){
+      const {start,end}=getFYDates(fy);
+      const fyPaysAll=state.payments.filter(p=>{const d=new Date(p.date);return d>=start&&d<end;});
+      const fyExpsAll=state.expenses.filter(e=>{const d=new Date(e.date);return d>=start&&d<end;});
+      if(!fyPaysAll.length&&!fyExpsAll.length) continue;
+      const fyIncome=fyPaysAll.reduce((a,p)=>a+parseFloat(p.amount||0),0);
+      const fyExp=fyExpsAll.reduce((a,e)=>a+parseFloat(e.amount||0),0);
+      const fyPaye=fyPaysAll.filter(p=>p.type==='salary').reduce((a,p)=>a+parseFloat(p.paye||0),0);
+      const fyTaxable=Math.max(0,fyIncome-fyExp);
+      const fyTax=Math.max(0,calcSARSTax(fyTaxable)-fyPaye);
+      const fyProfit=fyIncome-fyExp;
+      const effRate=fyIncome>0?((fyTax/fyIncome)*100).toFixed(1)+'%':'0%';
+      allFYs.push({fy,fyIncome,fyExp,fyTaxable,fyTax,fyProfit,effRate});
+    }
+  }
+
+  const ytbody=document.getElementById('dash-yearly-tbody');
+  if(ytbody){
+    if(allFYs.length===0){
+      ytbody.innerHTML='<tr><td colspan="7" style="padding:24px;text-align:center;color:var(--text3);font-size:13px">No financial data recorded yet</td></tr>';
+    } else {
+      // Sort newest first
+      allFYs.sort((a,b)=>b.fy-a.fy);
+      ytbody.innerHTML=allFYs.map(row=>{
+        const isSelected=String(row.fy)===fyVal;
+        const rowStyle=isSelected?'background:var(--accentglow)':'';
+        return `<tr style="${rowStyle};cursor:pointer" onclick="selectDashFY(${row.fy})">
+          <td style="padding:12px 14px;border-bottom:1px solid rgba(42,42,61,.4)">
+            <span style="font-family:'DM Mono',monospace;font-size:12px;color:${isSelected?'var(--accent)':'var(--text)'};font-weight:${isSelected?'700':'400'}">
+              FY ${row.fy-1}/${row.fy}
+            </span>
+            <span style="font-size:10px;color:var(--text3);margin-left:6px">
+              Mar ${row.fy-1} – Feb ${row.fy}
+            </span>
+            ${isSelected?'<span style="background:var(--accent);color:#fff;font-size:9px;padding:1px 6px;border-radius:4px;margin-left:6px">SELECTED</span>':''}
+          </td>
+          <td style="padding:12px 14px;border-bottom:1px solid rgba(42,42,61,.4);text-align:right;font-family:'DM Mono',monospace;color:var(--green)">${fmt(row.fyIncome)}</td>
+          <td style="padding:12px 14px;border-bottom:1px solid rgba(42,42,61,.4);text-align:right;font-family:'DM Mono',monospace;color:var(--accent)">${fmt(row.fyExp)}</td>
+          <td style="padding:12px 14px;border-bottom:1px solid rgba(42,42,61,.4);text-align:right;font-family:'DM Mono',monospace">${fmt(row.fyTaxable)}</td>
+          <td style="padding:12px 14px;border-bottom:1px solid rgba(42,42,61,.4);text-align:right;font-family:'DM Mono',monospace;color:var(--yellow)">${fmt(row.fyTax)}</td>
+          <td style="padding:12px 14px;border-bottom:1px solid rgba(42,42,61,.4);text-align:right;font-family:'DM Mono',monospace;color:${row.fyProfit>=0?'var(--green)':'var(--accent)'}">${fmtSign(row.fyProfit)}</td>
+          <td style="padding:12px 14px;border-bottom:1px solid rgba(42,42,61,.4);text-align:right;font-family:'DM Mono',monospace;color:var(--text2)">${row.effRate}</td>
+        </tr>`;
+      }).join('');
+      // Totals row
+      const totIncome=allFYs.reduce((a,r)=>a+r.fyIncome,0);
+      const totExp=allFYs.reduce((a,r)=>a+r.fyExp,0);
+      const totTax=allFYs.reduce((a,r)=>a+r.fyTax,0);
+      const totProfit=allFYs.reduce((a,r)=>a+r.fyProfit,0);
+      ytbody.innerHTML+=`<tr style="background:var(--surface2);font-weight:600">
+        <td style="padding:11px 14px;font-family:'DM Mono',monospace;font-size:11px;color:var(--text2)">ALL TIME TOTAL</td>
+        <td style="padding:11px 14px;text-align:right;font-family:'DM Mono',monospace;color:var(--green);font-size:13px">${fmt(totIncome)}</td>
+        <td style="padding:11px 14px;text-align:right;font-family:'DM Mono',monospace;color:var(--accent);font-size:13px">${fmt(totExp)}</td>
+        <td style="padding:11px 14px;text-align:right;font-family:'DM Mono',monospace;font-size:13px">${fmt(Math.max(0,totIncome-totExp))}</td>
+        <td style="padding:11px 14px;text-align:right;font-family:'DM Mono',monospace;color:var(--yellow);font-size:13px">${fmt(totTax)}</td>
+        <td style="padding:11px 14px;text-align:right;font-family:'DM Mono',monospace;color:${totProfit>=0?'var(--green)':'var(--accent)'};font-size:13px">${fmtSign(totProfit)}</td>
+        <td style="padding:11px 14px;text-align:right;font-family:'DM Mono',monospace;color:var(--text2)">${totIncome>0?((totTax/totIncome)*100).toFixed(1)+'%':'—'}</td>
+      </tr>`;
+    }
+  }
+
+  // ── Recent invoices
   const recent=[...state.invoices].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,6);
   const tbody=document.getElementById('dashboard-invoices-tbody');
   tbody.innerHTML=recent.length?recent.map(inv=>`
@@ -1662,6 +1838,11 @@ function renderDashboard(){
       <td><span class="badge badge-${inv.status}">${inv.status}</span></td>
       <td class="mono" style="color:var(--text2)">${inv.date||''}</td>
     </tr>`).join(''):'<tr><td colspan="5"><div class="empty-state" style="padding:24px"><div class="empty-icon">📋</div><div class="empty-text">No invoices yet</div></div></td></tr>';
+}
+
+function selectDashFY(fy){
+  const sel=document.getElementById('dash-fy-select');
+  if(sel){sel.value=String(fy);renderDashboard();}
 }
 
 // SARS 2025/2026 tax brackets (individual)
