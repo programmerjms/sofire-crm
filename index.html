@@ -1048,7 +1048,7 @@ textarea{resize:vertical;min-height:70px}
         </div>
         <div class="form-group" id="p-salary-type-row" style="display:none">
           <label>Income Type</label>
-          <select id="p-salary-type">
+          <select id="p-salary-type" onchange="calcSalaryTax()">
             <option value="salary">Monthly Salary</option>
             <option value="bonus">Bonus / Commission</option>
             <option value="overtime">Overtime Pay</option>
@@ -1056,16 +1056,76 @@ textarea{resize:vertical;min-height:70px}
             <option value="other">Other Income</option>
           </select>
         </div>
+        <!-- Shared fields (moved up so tax calc can reference amount) -->
+        <div class="form-group"><label>Gross Amount (R) *</label><input type="number" id="p-amount" step="0.01" oninput="calcSalaryTax()"></div>
+        <!-- Tax deductions -->
         <div class="form-group" id="p-paye-row" style="display:none">
-          <label>PAYE Deducted (R)</label>
-          <input type="number" id="p-paye" placeholder="0.00" step="0.01" value="0">
+          <label>PAYE Deducted by Employer (R)
+            <span style="font-size:10px;color:var(--text3);font-weight:400;margin-left:4px">— as shown on your payslip</span>
+          </label>
+          <input type="number" id="p-paye" placeholder="0.00" step="0.01" value="0" oninput="calcSalaryTax()">
         </div>
         <div class="form-group" id="p-uif-row" style="display:none">
           <label>UIF Deducted (R)</label>
-          <input type="number" id="p-uif" placeholder="0.00" step="0.01" value="0">
+          <input type="number" id="p-uif" placeholder="0.00" step="0.01" value="0" oninput="calcSalaryTax()">
         </div>
-        <!-- Shared fields -->
-        <div class="form-group"><label>Gross Amount (R) *</label><input type="number" id="p-amount" step="0.01"></div>
+        <!-- LIVE TAX BREAKDOWN PANEL -->
+        <div class="form-group full" id="p-tax-panel-row" style="display:none">
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px 18px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+              <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace">🇿🇦 SARS Tax Breakdown</div>
+              <div style="font-size:10px;color:var(--text3)">Based on monthly salary × 12</div>
+            </div>
+            <!-- Row 1: Gross + Annualised -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+              <div style="background:var(--surface);border-radius:7px;padding:11px 13px">
+                <div style="font-size:10px;color:var(--text3);margin-bottom:3px">Monthly Gross</div>
+                <div style="font-family:'DM Mono',monospace;font-size:15px;font-weight:600;color:var(--text)" id="ptax-monthly-gross">R0</div>
+              </div>
+              <div style="background:var(--surface);border-radius:7px;padding:11px 13px">
+                <div style="font-size:10px;color:var(--text3);margin-bottom:3px">Annual Gross (×12)</div>
+                <div style="font-family:'DM Mono',monospace;font-size:15px;font-weight:600;color:var(--text)" id="ptax-annual-gross">R0</div>
+              </div>
+            </div>
+            <!-- Row 2: Tax calc -->
+            <div style="background:var(--surface);border-radius:7px;padding:12px 14px;margin-bottom:10px">
+              <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">
+                <span style="color:var(--text2)">Annual Income Tax (SARS estimate)</span>
+                <span style="font-family:'DM Mono',monospace;color:var(--yellow)" id="ptax-annual-tax">R0</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">
+                <span style="color:var(--text2)">Monthly Tax (÷12)</span>
+                <span style="font-family:'DM Mono',monospace;color:var(--yellow)" id="ptax-monthly-tax">R0</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">
+                <span style="color:var(--text2)">PAYE Deducted This Month</span>
+                <span style="font-family:'DM Mono',monospace;color:var(--green)" id="ptax-paye-this">−R0</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:7px 0 3px;font-size:13px;font-weight:600">
+                <span style="color:var(--text)">Tax Difference (over/under)</span>
+                <span style="font-family:'DM Mono',monospace;font-size:14px" id="ptax-diff">R0</span>
+              </div>
+            </div>
+            <!-- Row 3: Net pay + deductions -->
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+              <div style="background:var(--surface);border-radius:7px;padding:10px 12px;text-align:center">
+                <div style="font-size:10px;color:var(--text3);margin-bottom:3px">PAYE</div>
+                <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--accent)" id="ptax-d-paye">R0</div>
+              </div>
+              <div style="background:var(--surface);border-radius:7px;padding:10px 12px;text-align:center">
+                <div style="font-size:10px;color:var(--text3);margin-bottom:3px">UIF</div>
+                <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--accent)" id="ptax-d-uif">R0</div>
+              </div>
+              <div style="background:var(--surface);border:1px solid var(--green);border-radius:7px;padding:10px 12px;text-align:center">
+                <div style="font-size:10px;color:var(--text3);margin-bottom:3px">Net Take-Home</div>
+                <div style="font-family:'DM Mono',monospace;font-size:14px;color:var(--green);font-weight:700" id="ptax-net">R0</div>
+              </div>
+            </div>
+            <!-- Tax status message -->
+            <div id="ptax-status-msg" style="font-size:11px;line-height:1.6;padding:8px 12px;border-radius:6px;display:none"></div>
+            <div style="font-size:10px;color:var(--text3);margin-top:8px">⚠ SARS estimate only. Uses 2025/2026 annual brackets applied to annualised salary. Consult your tax practitioner.</div>
+          </div>
+        </div>
         <div class="form-group"><label>Date *</label><input type="date" id="p-date-input"></div>
         <div class="form-group"><label>Method</label>
           <select id="p-method"><option>EFT</option><option>Cash</option><option>Card</option><option>PayFast</option><option>SnapScan</option><option>Other</option></select>
@@ -2839,6 +2899,92 @@ function renderMonthlyBars(fyYear, fyStart, fyEnd){
   ).join('');
 }
 let currentPayType='invoice';
+
+// Live salary tax calculator
+function calcSalaryTax(){
+  const gross = parseFloat(document.getElementById('p-amount')?.value||0);
+  const paye  = parseFloat(document.getElementById('p-paye')?.value||0);
+  const uif   = parseFloat(document.getElementById('p-uif')?.value||0);
+  const fmt   = v=>'R'+Math.abs(v).toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const set   = (id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+
+  if(!gross || gross<=0){
+    // Clear panel if no amount
+    set('ptax-monthly-gross','R0');set('ptax-annual-gross','R0');
+    set('ptax-annual-tax','R0');set('ptax-monthly-tax','R0');
+    set('ptax-paye-this','−R0');set('ptax-diff','R0');
+    set('ptax-d-paye','R0');set('ptax-d-uif','R0');set('ptax-net','R0');
+    const msgEl=document.getElementById('ptax-status-msg');
+    if(msgEl)msgEl.style.display='none';
+    return;
+  }
+
+  // Annualise: assume this is monthly salary
+  const isMonthlySalary = ['salary','overtime'].includes(document.getElementById('p-salary-type')?.value||'salary');
+  const annualGross = isMonthlySalary ? gross * 12 : gross; // bonus/commission = once-off
+  const monthlyGross = isMonthlySalary ? gross : gross/12;
+
+  // SARS tax on annual income (uses existing calcSARSTax which includes primary rebate)
+  const annualTax   = calcSARSTax(annualGross);
+  const monthlyTax  = annualTax / 12;
+
+  // PAYE comparison
+  const annualPaye  = paye * (isMonthlySalary ? 12 : 1);
+  const diff        = annualPaye - annualTax; // positive = overpaid (refund), negative = underpaid
+  const monthlyDiff = diff / 12;
+
+  // Net take-home
+  const net = gross - paye - uif;
+
+  // Update display
+  set('ptax-monthly-gross', fmt(monthlyGross));
+  set('ptax-annual-gross',  fmt(annualGross));
+  set('ptax-annual-tax',    fmt(annualTax));
+  set('ptax-monthly-tax',   fmt(monthlyTax));
+  set('ptax-paye-this',     '−'+fmt(paye));
+  set('ptax-d-paye',        fmt(paye));
+  set('ptax-d-uif',         fmt(uif));
+  set('ptax-net',           fmt(net));
+
+  // Tax difference — colour coded
+  const diffEl = document.getElementById('ptax-diff');
+  if(diffEl){
+    if(Math.abs(diff) < 10){
+      diffEl.textContent = 'R0.00 (correct)';
+      diffEl.style.color = 'var(--green)';
+    } else if(diff > 0){
+      diffEl.textContent = '+'+fmt(diff)+' (overpaid — expect refund)';
+      diffEl.style.color = 'var(--green)';
+    } else {
+      diffEl.textContent = '−'+fmt(Math.abs(diff))+' (underpaid — owe SARS)';
+      diffEl.style.color = 'var(--accent)';
+    }
+  }
+
+  // Status message
+  const msgEl = document.getElementById('ptax-status-msg');
+  if(msgEl){
+    if(Math.abs(diff) < 10){
+      msgEl.style.display='block';
+      msgEl.style.background='rgba(45,218,140,.1)';
+      msgEl.style.color='var(--green)';
+      msgEl.textContent='✓ Your PAYE matches the estimated tax. No additional payment needed.';
+    } else if(diff > 0){
+      msgEl.style.display='block';
+      msgEl.style.background='rgba(45,218,140,.1)';
+      msgEl.style.color='var(--green)';
+      msgEl.textContent=`✓ Your employer deducted ${fmt(paye)}/month PAYE. You are ahead by ${fmt(Math.abs(monthlyDiff))}/month — likely get a refund at assessment.`;
+    } else {
+      const perMonth = fmt(Math.abs(monthlyDiff));
+      const total    = fmt(Math.abs(diff));
+      msgEl.style.display='block';
+      msgEl.style.background='rgba(255,60,60,.08)';
+      msgEl.style.color='var(--accent)';
+      msgEl.textContent=`⚠ Your PAYE is ${fmt(paye)}/month but estimated tax is ${fmt(monthlyTax)}/month. You are short ${perMonth}/month (${total}/year) — you will owe SARS at assessment.`;
+    }
+  }
+}
+
 function setPayType(type){
   currentPayType=type;
   const isInv=type==='invoice';
@@ -2851,8 +2997,10 @@ function setPayType(type){
   document.getElementById('p-salary-type-row').style.display=isInv?'none':'';
   document.getElementById('p-paye-row').style.display=isInv?'none':'';
   document.getElementById('p-uif-row').style.display=isInv?'none':'';
+  document.getElementById('p-tax-panel-row').style.display=isInv?'none':'';
+  if(!isInv) setTimeout(calcSalaryTax,50);
   document.getElementById('pay-modal-title').textContent=isInv?'Record Invoice Payment':'Record Salary / Income';
-  if(!isInv){document.getElementById('p-method').value='EFT';}
+  if(!isInv){document.getElementById('p-method').value='EFT'; setTimeout(calcSalaryTax,80);}
 }
 let editingPayId=null;
 function openPaymentModal(editId){
@@ -2882,6 +3030,7 @@ function openPaymentModal(editId){
     const st=document.getElementById('p-salary-type');
     if(st)[...st.options].forEach(o=>{if(o.value===p.salaryType)o.selected=true;});
   }
+  if(isSal) setTimeout(calcSalaryTax, 120);
   // Method
   if(p){const pm=document.getElementById('p-method');[...pm.options].forEach(o=>{if(o.value===p.method)o.selected=true;});}
   // Update modal title and save button
