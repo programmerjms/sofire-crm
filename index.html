@@ -551,7 +551,7 @@ textarea{resize:vertical;min-height:70px}
     </div>
     <div style="display:flex;gap:9px">
       <button class="btn btn-ghost" onclick="exportExpensesCSV()">⬇ Export CSV</button>
-      <button class="btn btn-ghost" onclick="shareBookkeeper()">📧 Share with Bookkeeper</button>
+      <button class="btn btn-ghost" onclick="openExpenseSendModal()">📧 Email Bookkeeper</button>
       <button class="btn btn-primary" onclick="openExpenseModal()">＋ Add Expense</button>
     </div>
   </div>
@@ -672,16 +672,31 @@ textarea{resize:vertical;min-height:70px}
     </div>
   </div>
   <div class="settings-section">
-    <div class="settings-header">Email (EmailJS — for sending invoices)</div>
+    <div class="settings-header">Email — Netlify SMTP Function</div>
     <div class="settings-body">
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px;font-size:12px;color:var(--text2);line-height:1.7">
-        Sign up free at <a href="https://www.emailjs.com" target="_blank" style="color:var(--blue)">emailjs.com</a> → Create a service (Gmail/Outlook) → Create a template → Copy your keys below.<br>
-        Template variables to use: <code style="color:var(--yellow)">{{to_email}}</code> <code style="color:var(--yellow)">{{to_name}}</code> <code style="color:var(--yellow)">{{invoice_number}}</code> <code style="color:var(--yellow)">{{amount}}</code> <code style="color:var(--yellow)">{{due_date}}</code> <code style="color:var(--yellow)">{{from_name}}</code> <code style="color:var(--yellow)">{{message}}</code>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px;font-size:12px;color:var(--text2);line-height:1.9">
+        Emails are sent from <strong>finance@sofire-it.co.za</strong> via your domains.co.za mail server through a Netlify serverless function.<br>
+        Add these <strong>5 Environment Variables</strong> in <strong>Netlify Dashboard → Your Site → Site Configuration → Environment Variables</strong>, then redeploy:<br><br>
+        <div style="background:var(--surface3);border-radius:6px;padding:10px 12px;font-family:'DM Mono',monospace;font-size:11px;line-height:2">
+          <span style="color:var(--yellow)">SMTP_HOST</span> &nbsp;= &nbsp;<span style="color:var(--green)">mail.sofire-it.co.za</span><br>
+          <span style="color:var(--yellow)">SMTP_PORT</span> &nbsp;= &nbsp;<span style="color:var(--green)">465</span><br>
+          <span style="color:var(--yellow)">SMTP_USER</span> &nbsp;= &nbsp;<span style="color:var(--green)">finance@sofire-it.co.za</span><br>
+          <span style="color:var(--yellow)">SMTP_PASS</span> &nbsp;= &nbsp;<span style="color:var(--accent)">your email password</span><br>
+          <span style="color:var(--yellow)">SMTP_FROM</span> &nbsp;= &nbsp;<span style="color:var(--green)">Juan Du Plessis &lt;finance@sofire-it.co.za&gt;</span>
+        </div><br>
+        <span style="color:var(--accent)">⚠ Never put your password directly in any file pushed to GitHub.</span>
       </div>
       <div class="form-grid">
-        <div class="form-group"><label>EmailJS Public Key</label><input type="text" id="set-ejs-key" placeholder="user_xxxxxxxxxxxxxxx"></div>
-        <div class="form-group"><label>EmailJS Service ID</label><input type="text" id="set-ejs-service" placeholder="service_xxxxxxx"></div>
-        <div class="form-group full"><label>EmailJS Template ID</label><input type="text" id="set-ejs-template" placeholder="template_xxxxxxx"></div>
+        <div class="form-group full">
+          <label>Send Test Email</label>
+          <div style="display:flex;gap:9px">
+            <input type="email" id="set-test-email" placeholder="your@email.co.za" style="flex:1">
+            <button class="btn btn-blue" onclick="sendTestEmail()">Send Test</button>
+          </div>
+        </div>
+        <div class="form-group full" style="margin-top:4px">
+          <div id="smtp-status" style="font-size:12px;color:var(--text3)">Status will appear here after sending a test.</div>
+        </div>
       </div>
     </div>
   </div>
@@ -863,24 +878,33 @@ textarea{resize:vertical;min-height:70px}
 
 <!-- Send Invoice Modal -->
 <div class="modal-overlay" id="send-modal">
-  <div class="modal">
-    <div class="modal-header"><div class="modal-title">Send Invoice by Email</div><button class="modal-close" onclick="closeModal('send-modal')">×</button></div>
+  <div class="modal modal-wide">
+    <div class="modal-header">
+      <div class="modal-title" id="send-modal-title">Send Invoice by Email</div>
+      <button class="modal-close" onclick="closeModal('send-modal')">×</button>
+    </div>
     <div class="modal-body">
-      <div id="send-modal-nokey" style="display:none;background:rgba(255,194,74,.08);border:1px solid rgba(255,194,74,.3);border-radius:8px;padding:14px;margin-bottom:14px;font-size:12px;color:var(--yellow)">
-        ⚠ EmailJS not configured. Go to <strong>Settings → Email</strong> to add your EmailJS keys first.<br><br>
-        <a href="https://www.emailjs.com" target="_blank" style="color:var(--blue)">Sign up free at emailjs.com →</a>
-      </div>
+      <!-- Status bar -->
+      <div id="send-status-bar" style="display:none;border-radius:8px;padding:11px 14px;margin-bottom:14px;font-size:12px;font-weight:500"></div>
       <div class="form-grid">
-        <div class="form-group full"><label>To Email *</label><input type="email" id="send-to-email" placeholder="client@example.co.za"></div>
-        <div class="form-group full"><label>To Name</label><input type="text" id="send-to-name"></div>
-        <div class="form-group full"><label>Subject</label><input type="text" id="send-subject" placeholder="Invoice #202603846 from Sofire-IT Support"></div>
-        <div class="form-group full"><label>Message</label><textarea id="send-message" style="min-height:100px"></textarea></div>
+        <div class="form-group"><label>To Email *</label><input type="email" id="send-to-email" placeholder="client@example.co.za"></div>
+        <div class="form-group"><label>To Name</label><input type="text" id="send-to-name" placeholder="Client Name"></div>
+        <div class="form-group full"><label>Subject</label><input type="text" id="send-subject"></div>
+        <div class="form-group full"><label>Message Body</label><textarea id="send-message" style="min-height:110px"></textarea></div>
+        <!-- Attachment preview -->
+        <div class="form-group full" id="send-attach-wrap">
+          <label>Attachment</label>
+          <div id="send-attach-info" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:11px 14px;font-size:12px;color:var(--text2);display:flex;align-items:center;gap:10px">
+            <span style="font-size:18px">📎</span>
+            <span id="send-attach-label">Invoice PDF will be generated and attached automatically</span>
+          </div>
+        </div>
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('send-modal')">Cancel</button>
-      <button class="btn btn-ghost" onclick="sendMailto()">Open in Mail App</button>
-      <button class="btn btn-blue" onclick="sendEmailJS()" id="send-ejs-btn">✉ Send via EmailJS</button>
+      <button class="btn btn-ghost" onclick="sendMailto()">📧 Open in Mail App</button>
+      <button class="btn btn-blue" onclick="sendViaSMTP()" id="send-smtp-btn">✉ Send Email</button>
     </div>
   </div>
 </div>
@@ -923,7 +947,7 @@ let state = {
     accNum:'63095872032',
     branch:'250655',
     accType:'First Business Zero Account',
-    ejsKey:'', ejsService:'', ejsTemplate:'',
+    // SMTP configured via Netlify environment variables
     vatNum:'', taxNum:'',
     vatRate:15, vatOnInvoices:false,
     fyStart:3,
@@ -997,7 +1021,6 @@ function loadSettings(){
   setV('set-phone',s.phone);setV('set-email',s.email);setV('set-website',s.website);setV('set-address',s.address);
   setV('set-bank',s.bank);setV('set-acc-holder',s.accHolder);setV('set-acc-num',s.accNum);
   setV('set-branch',s.branch);setV('set-acc-type',s.accType);
-  setV('set-ejs-key',s.ejsKey);setV('set-ejs-service',s.ejsService);setV('set-ejs-template',s.ejsTemplate);
   setV('set-vat',s.vatNum);setV('set-tax-num',s.taxNum);
   setV('set-vat-rate',s.vatRate);setV('set-vat-inv',s.vatOnInvoices?'1':'0');
   setV('set-fy-start',s.fyStart);setV('set-bk-email',s.bkEmail);
@@ -1012,7 +1035,6 @@ function saveSettings(){
     phone:gv('set-phone'),email:gv('set-email'),website:gv('set-website'),address:gv('set-address'),
     bank:gv('set-bank'),accHolder:gv('set-acc-holder'),accNum:gv('set-acc-num'),
     branch:gv('set-branch'),accType:gv('set-acc-type'),
-    ejsKey:gv('set-ejs-key'),ejsService:gv('set-ejs-service'),ejsTemplate:gv('set-ejs-template'),
     vatNum:gv('set-vat'),taxNum:gv('set-tax-num'),
     vatRate:parseFloat(gv('set-vat-rate'))||15,
     vatOnInvoices:gv('set-vat-inv')==='1',
@@ -1475,66 +1497,249 @@ function buildInvoiceHTML(inv,s){
 }
 
 // ============================================================
-//  SEND EMAIL
+//  SEND EMAIL — via Netlify SMTP function
 // ============================================================
-function openSendModal(){
-  const inv=collectInvoiceData();
-  state.currentSendInvId=state.editingId||'unsaved';
-  prefillSendModal(inv);
+
+// Convert invoice HTML to a base64 "PDF" (actually a self-contained HTML file for now)
+// For a true PDF you'd need a headless browser — this sends the invoice as an HTML attachment
+// that renders perfectly in any email client when opened.
+function buildInvoiceEmailHTML(inv, s) {
+  const html = buildInvoiceHTML(inv, s);
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Helvetica Neue,Arial,sans-serif;padding:32px;background:#fff;color:#1a1a1a}</style>
+    </head><body>${html}</body></html>`;
 }
-function quickSend(id){
-  const inv=state.invoices.find(i=>i.id===id);if(!inv)return;
-  state.currentSendInvId=id;
-  prefillSendModal(inv);
+
+// Build the styled HTML email body (what the recipient sees in their inbox)
+function buildEmailBody(inv, s, message) {
+  const fmtR = v => 'R' + parseFloat(v || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtD = d => { try { return new Date(d + 'T00:00:00').toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return d || '—'; } };
+  const items = (inv.items || []).map(i => {
+    const parts = i.desc.split('|'); const main = parts[0].trim(); const sub = parts[1] ? parts[1].trim() : '';
+    return `<tr>
+      <td style="padding:10px 12px;border-bottom:1px solid #f0f0f0;font-size:13px">${main}${sub ? `<br><span style="font-size:11px;color:#e05c00">${sub}</span>` : ''}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #f0f0f0;text-align:right;font-size:13px">${i.price ? fmtR(i.price) : ''}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #f0f0f0;text-align:right;font-size:13px">${i.qty || ''}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #f0f0f0;text-align:right;font-size:13px;font-weight:600">${i.amount ? fmtR(i.amount) : ''}</td>
+    </tr>`;
+  }).join('');
+  return `
+  <div style="font-family:Helvetica Neue,Arial,sans-serif;max-width:640px;margin:0 auto;background:#ffffff">
+    <!-- Header -->
+    <div style="background:#0a0a0f;padding:22px 28px;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="color:#ffffff;font-size:17px;font-weight:800;letter-spacing:-0.3px">${s.company || 'Sofire-IT Support'}</div>
+        <div style="color:#ff3c3c;font-size:10px;letter-spacing:1.2px;text-transform:uppercase;margin-top:3px">Invoice</div>
+      </div>
+      ${s.logoData ? `<img src="${s.logoData}" style="width:56px;height:56px;object-fit:contain;border-radius:6px">` : ''}
+    </div>
+    <!-- Body -->
+    <div style="background:#ffffff;padding:28px;border:1px solid #e8e8e8;border-top:none">
+      <p style="font-size:14px;color:#1a1a1a;margin-bottom:20px;line-height:1.7;white-space:pre-line">${message.replace(/\n/g, '<br>')}</p>
+      <!-- Invoice summary box -->
+      <div style="background:#f8f8f8;border:1px solid #e0e0e0;border-radius:6px;padding:16px 18px;margin-bottom:20px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <tr>
+            <td style="color:#888;padding:3px 0">Invoice Number</td>
+            <td style="font-weight:700;text-align:right;color:#111">${inv.number || '—'}</td>
+          </tr>
+          <tr>
+            <td style="color:#888;padding:3px 0">Date</td>
+            <td style="font-weight:600;text-align:right;color:#111">${fmtD(inv.date)}</td>
+          </tr>
+          ${inv.due ? `<tr><td style="color:#888;padding:3px 0">Due Date</td><td style="font-weight:600;text-align:right;color:#c00">${fmtD(inv.due)}</td></tr>` : ''}
+          <tr>
+            <td style="color:#888;padding:3px 0">Billed To</td>
+            <td style="font-weight:600;text-align:right;color:#111">${inv.custName || '—'}</td>
+          </tr>
+        </table>
+      </div>
+      <!-- Items table -->
+      <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+        <thead>
+          <tr style="background:#f8f8f8;border-bottom:1px solid #ccc">
+            <th style="padding:9px 12px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.8px;font-weight:700">Item</th>
+            <th style="padding:9px 12px;text-align:right;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.8px;font-weight:700">Price</th>
+            <th style="padding:9px 12px;text-align:right;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.8px;font-weight:700">Days</th>
+            <th style="padding:9px 12px;text-align:right;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.8px;font-weight:700">Amount</th>
+          </tr>
+        </thead>
+        <tbody>${items || '<tr><td colspan="4" style="padding:12px;color:#bbb;font-size:11px">No items</td></tr>'}</tbody>
+        <tfoot>
+          <tr><td colspan="3" style="padding:8px 12px;text-align:right;font-size:12px;color:#666">Subtotal</td><td style="padding:8px 12px;text-align:right;font-size:12px;font-weight:600">${fmtR(inv.subtotal || inv.total)}</td></tr>
+          <tr style="border-top:2px solid #111"><td colspan="3" style="padding:12px;text-align:right;font-size:14px;font-weight:800;color:#111">Amount Due</td><td style="padding:12px;text-align:right;font-size:16px;font-weight:900;color:#111">${fmtR(inv.total)}</td></tr>
+        </tfoot>
+      </table>
+      <!-- Payment details -->
+      <div style="background:#f0f7ff;border:1px solid #c8dff7;border-radius:6px;padding:14px 18px;margin-bottom:20px">
+        <div style="font-size:12px;font-weight:700;color:#1a1a1a;margin-bottom:8px">Payment Instructions</div>
+        <div style="font-size:12px;color:#444;line-height:1.8">
+          Bank: ${s.bank || 'FNB/RMB'}<br>
+          Account Holder: ${s.accHolder || 'Sofireit Support'}<br>
+          Account Type: ${s.accType || 'First Business Zero Account'}<br>
+          Account Number: <strong>${s.accNum || '63095872032'}</strong><br>
+          Branch Code: <strong>${s.branch || '250655'}</strong>
+        </div>
+      </div>
+      ${inv.notes ? `<p style="font-size:12px;color:#666;line-height:1.6;margin-bottom:16px">${inv.notes}</p>` : ''}
+      <p style="font-size:11px;color:#999;line-height:1.6">
+        <strong style="color:#555">No Refund Policy:</strong> ${inv.refundPolicy || s.defaultRefundPolicy || ''}<br><br>
+        <strong style="color:#555">Client Obligations:</strong> ${inv.clientObligations || s.defaultClientObligations || ''}
+      </p>
+    </div>
+    <!-- Footer -->
+    <div style="background:#f8f8f8;padding:14px 28px;border:1px solid #e8e8e8;border-top:none;border-radius:0 0 8px 8px;font-size:11px;color:#aaa;text-align:center">
+      ${s.company || 'Sofire-IT Support'} · ${s.email || 'juan@sofire-it.co.za'} · ${s.phone || '+27 671 371 638'}
+      ${s.website ? ` · <a href="${s.website}" style="color:#aaa">${s.website}</a>` : ''}
+    </div>
+  </div>`;
 }
-function prefillSendModal(inv){
-  const s=state.settings;
-  document.getElementById('send-to-email').value=inv.custEmail||'';
-  document.getElementById('send-to-name').value=inv.custName||'';
-  document.getElementById('send-subject').value=`Invoice ${inv.number} from ${s.company}`;
-  document.getElementById('send-message').value=`Dear ${inv.custName||'Client'},\n\nPlease find your invoice ${inv.number} for R${parseFloat(inv.total||0).toFixed(2)} attached.\n\nDue date: ${inv.due||'30 days'}\n\nPayment details:\nBank: ${s.bank}\nAccount: ${s.accNum}\nBranch: ${s.branch}\n\nThank you for your business!\n\n${s.owner||s.company}\n${s.phone||''}\n${s.email||''}`;
-  const hasKeys=s.ejsKey&&s.ejsService&&s.ejsTemplate;
-  document.getElementById('send-modal-nokey').style.display=hasKeys?'none':'block';
-  document.getElementById('send-ejs-btn').disabled=!hasKeys;
+
+function openSendModal() {
+  const inv = collectInvoiceData();
+  state.currentSendInvId = state.editingId || 'unsaved';
+  prefillSendModal(inv, 'invoice');
+}
+function quickSend(id) {
+  const inv = state.invoices.find(i => i.id === id); if (!inv) return;
+  state.currentSendInvId = id;
+  prefillSendModal(inv, 'invoice');
+}
+function openExpenseSendModal() {
+  state.currentSendInvId = null;
+  prefillSendModal(null, 'expenses');
+}
+function prefillSendModal(inv, type) {
+  const s = state.settings;
+  state.currentSendType = type;
+  const isExp = type === 'expenses';
+  document.getElementById('send-modal-title').textContent = isExp ? 'Send Expense Report' : 'Send Invoice by Email';
+  document.getElementById('send-to-email').value = isExp ? (s.bkEmail || '') : (inv?.custEmail || '');
+  document.getElementById('send-to-name').value = isExp ? 'Bookkeeper' : (inv?.custName || '');
+  if (isExp) {
+    document.getElementById('send-subject').value = `Expense Report — ${s.company}`;
+    document.getElementById('send-message').value = `Hi,\n\nPlease find attached the expense report for ${s.company}.\n\nKind regards,\n${s.owner || s.company}\n${s.phone || ''}\n${s.email || ''}`;
+    document.getElementById('send-attach-label').textContent = 'Expense report (CSV) will be attached automatically';
+  } else {
+    document.getElementById('send-subject').value = `Invoice ${inv.number} from ${s.company}`;
+    document.getElementById('send-message').value = `Dear ${inv.custName || 'Client'},\n\nPlease find your invoice ${inv.number} for R${parseFloat(inv.total || 0).toFixed(2)} attached.\n\nDue date: ${inv.due ? new Date(inv.due + 'T00:00:00').toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }) : '30 days'}\n\nPayment details:\nBank: ${s.bank || 'FNB/RMB'}\nAccount: ${s.accNum || '63095872032'}\nBranch: ${s.branch || '250655'}\n\nThank you for your business!\n\n${s.owner || s.company}\n${s.phone || ''}\n${s.email || ''}`;
+    document.getElementById('send-attach-label').textContent = `Invoice ${inv.number} (HTML) will be attached`;
+  }
+  document.getElementById('send-status-bar').style.display = 'none';
   openModal('send-modal');
 }
-function sendMailto(){
-  const to=document.getElementById('send-to-email').value;
-  const subj=encodeURIComponent(document.getElementById('send-subject').value);
-  const body=encodeURIComponent(document.getElementById('send-message').value);
+function sendMailto() {
+  const to = document.getElementById('send-to-email').value;
+  const subj = encodeURIComponent(document.getElementById('send-subject').value);
+  const body = encodeURIComponent(document.getElementById('send-message').value);
   window.open(`mailto:${to}?subject=${subj}&body=${body}`);
-  closeModal('send-modal');toast('Opened in mail app','success');
+  closeModal('send-modal'); toast('Opened in mail app', 'success');
 }
-async function sendEmailJS(){
-  const s=state.settings;
-  if(!s.ejsKey||!s.ejsService||!s.ejsTemplate){toast('Configure EmailJS in Settings first','error');return;}
-  const btn=document.getElementById('send-ejs-btn');
-  btn.textContent='Sending...';btn.disabled=true;
-  const inv=state.currentSendInvId!=='unsaved'?state.invoices.find(i=>i.id===state.currentSendInvId):collectInvoiceData();
-  try{
-    // Load EmailJS on demand
-    if(!window.emailjs){
-      await new Promise((res,rej)=>{
-        const sc=document.createElement('script');
-        sc.src='https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';
-        sc.onload=res;sc.onerror=rej;document.head.appendChild(sc);
-      });
+function setSendStatus(msg, ok) {
+  const bar = document.getElementById('send-status-bar');
+  bar.style.display = 'block';
+  bar.style.background = ok ? 'rgba(45,218,140,.12)' : 'rgba(255,60,60,.12)';
+  bar.style.border = ok ? '1px solid rgba(45,218,140,.3)' : '1px solid rgba(255,60,60,.3)';
+  bar.style.color = ok ? 'var(--green)' : 'var(--accent)';
+  bar.textContent = msg;
+}
+async function sendViaSMTP() {
+  const btn = document.getElementById('send-smtp-btn');
+  const to = document.getElementById('send-to-email').value.trim();
+  const toName = document.getElementById('send-to-name').value.trim();
+  const subject = document.getElementById('send-subject').value.trim();
+  const message = document.getElementById('send-message').value.trim();
+  if (!to || !subject) { setSendStatus('⚠ Please fill in the recipient email and subject.', false); return; }
+  btn.textContent = '⏳ Sending...'; btn.disabled = true;
+  const s = state.settings;
+  const isExp = state.currentSendType === 'expenses';
+  let attachments = [];
+  try {
+    if (isExp) {
+      // Build CSV expense report attachment
+      const csv = buildExpenseCSVString();
+      const b64 = btoa(unescape(encodeURIComponent(csv)));
+      attachments.push({ filename: `expense-report-${new Date().toISOString().split('T')[0]}.csv`, data: b64, contentType: 'text/csv' });
+    } else {
+      // Build invoice HTML attachment
+      const inv = state.currentSendInvId && state.currentSendInvId !== 'unsaved'
+        ? state.invoices.find(i => i.id === state.currentSendInvId)
+        : collectInvoiceData();
+      const invHtml = buildInvoiceEmailHTML(inv, s);
+      const b64 = btoa(unescape(encodeURIComponent(invHtml)));
+      attachments.push({ filename: `Invoice-${inv.number}.html`, data: b64, contentType: 'text/html' });
+      // Also build rich HTML body
+      var htmlBody = buildEmailBody(inv, s, message);
     }
-    emailjs.init({publicKey:s.ejsKey});
-    await emailjs.send(s.ejsService,s.ejsTemplate,{
-      to_email:document.getElementById('send-to-email').value,
-      to_name:document.getElementById('send-to-name').value,
-      invoice_number:inv?.number||'',
-      amount:'R'+parseFloat(inv?.total||0).toFixed(2),
-      due_date:inv?.due||'',
-      from_name:s.owner||s.company,
-      from_email:s.email,
-      message:document.getElementById('send-message').value
+    const payload = {
+      to, toName, subject, message,
+      htmlBody: htmlBody || null,
+      attachments
+    };
+    const resp = await fetch('/.netlify/functions/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     });
-    closeModal('send-modal');toast('Invoice sent ✓','success');
-    if(inv&&inv.status==='draft'){inv.status='pending';save();}
-  }catch(e){toast('Send failed: '+e.message,'error');}
-  btn.textContent='✉ Send via EmailJS';btn.disabled=false;
+    const result = await resp.json();
+    if (resp.ok && result.success) {
+      setSendStatus('✓ Email sent successfully!', true);
+      toast('Email sent ✓', 'success');
+      // Mark invoice as sent
+      if (!isExp && state.currentSendInvId && state.currentSendInvId !== 'unsaved') {
+        const inv = state.invoices.find(i => i.id === state.currentSendInvId);
+        if (inv && inv.status === 'draft') { inv.status = 'pending'; save(); }
+      }
+      setTimeout(() => closeModal('send-modal'), 1800);
+    } else {
+      const errMsg = result.error || 'Unknown error';
+      if (errMsg.includes('SMTP') || errMsg.includes('not configured')) {
+        setSendStatus('⚠ SMTP not configured. Add SMTP_HOST, SMTP_USER, SMTP_PASS to Netlify Environment Variables.', false);
+      } else {
+        setSendStatus('✗ Send failed: ' + errMsg, false);
+      }
+    }
+  } catch (err) {
+    setSendStatus('✗ Could not reach the send function. Make sure the Netlify function is deployed.', false);
+  }
+  btn.textContent = '✉ Send Email'; btn.disabled = false;
+}
+// Helper: build expense CSV string for attachment
+function buildExpenseCSVString() {
+  const s = state.settings;
+  const exps = [...state.expenses].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const grossIncome = state.payments.reduce((a, p) => a + parseFloat(p.amount || 0), 0);
+  const totalExp = exps.reduce((a, e) => a + e.amount, 0);
+  let csv = `Sofire-IT Support Expense Report\nGenerated: ${new Date().toLocaleDateString('en-ZA')}\n\n`;
+  csv += `Gross Income,R${grossIncome.toFixed(2)}\nTotal Expenses,R${totalExp.toFixed(2)}\nNet Profit,R${(grossIncome - totalExp).toFixed(2)}\n\n`;
+  csv += `Date,Category,Description,Amount,Method,Notes\n`;
+  exps.forEach(e => { csv += `${e.date},"${e.category}","${e.desc}",${e.amount.toFixed(2)},${e.method || ''},"${e.notes || ''}"\n`; });
+  return csv;
+}
+async function sendTestEmail() {
+  const to = document.getElementById('set-test-email').value.trim();
+  if (!to) { toast('Enter a test email address', 'error'); return; }
+  const status = document.getElementById('smtp-status');
+  status.textContent = '⏳ Sending test...'; status.style.color = 'var(--text2)';
+  try {
+    const resp = await fetch('/.netlify/functions/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to, subject: 'Sofire-IT CRM — SMTP Test Email',
+        message: 'This is a test email from your Sofire-IT CRM. Your SMTP connection is working correctly!',
+        attachments: []
+      })
+    });
+    const result = await resp.json();
+    if (resp.ok && result.success) {
+      status.textContent = '✓ Test email sent! Check your inbox.'; status.style.color = 'var(--green)';
+    } else {
+      status.textContent = '✗ ' + (result.error || 'Send failed'); status.style.color = 'var(--accent)';
+    }
+  } catch (e) {
+    status.textContent = '✗ Function not reachable. Deploy to Netlify first.'; status.style.color = 'var(--accent)';
+  }
 }
 
 // ============================================================
