@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sofire-IT Support — Invoice CRM</title>
+<title id="page-title">Invoice CRM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -263,7 +263,7 @@ textarea{resize:vertical;min-height:70px}
       </div>
       <button class="login-btn" onclick="doLogin()">Sign In</button>
     </div>
-    <div class="login-footer">Sofire-IT Support — Private CRM</div>
+    <div class="login-footer" id="login-footer-text">Private CRM</div>
   </div>
 </div>
 
@@ -1685,7 +1685,8 @@ function applyRoleRestrictions() {
       const banner = document.createElement('div');
       banner.id = 'viewer-banner';
       banner.style.cssText = 'position:fixed;bottom:0;left:230px;right:0;background:rgba(74,158,255,.12);border-top:1px solid rgba(74,158,255,.3);padding:8px 20px;font-size:12px;color:var(--blue);z-index:90;display:flex;align-items:center;gap:8px';
-      banner.innerHTML = '👁 <strong>View-only mode</strong> — You can view all data but cannot make changes. Contact Juan Du Plessis to request edit access.';
+      const adminName = state.settings.owner || state.settings.company?.split('(')[0].trim() || 'the administrator';
+      banner.innerHTML = '👁 <strong>View-only mode</strong> — You can view all data but cannot make changes. Contact ' + adminName + ' to request edit access.';
       document.body.appendChild(banner);
     }
   }
@@ -1951,8 +1952,10 @@ async function saveNewTenant() {
     saveTenants(tenants);
     lastCreatedTenant = { ...tenant, plainPassword: pw };
     closeModal('new-tenant-modal');
-    // Show the link modal
-    const url = `${window.location.origin}${window.location.pathname}?tenant=${id}`;
+    // Build self-contained URL — embeds tenant ID + hashed credentials
+    // so any browser (incognito, different device) can authenticate
+    const encodedHash = btoa(hash).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+    const url = `${window.location.origin}${window.location.pathname}?tenant=${id}&u=${encodeURIComponent(username)}&h=${encodedHash}`;
     document.getElementById('tl-url').value = url;
     document.getElementById('tl-username').value = username;
     document.getElementById('tl-password').value = pw;
@@ -1976,7 +1979,9 @@ async function saveNewTenant() {
 function showTenantLink(id) {
   const t = getTenants().find(x=>x.id===id);
   if (!t) return;
-  const url = `${window.location.origin}${window.location.pathname}?tenant=${id}`;
+  // Rebuild self-contained URL from stored hash
+  const encodedHash = btoa(t.passwordHash||'').replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+  const url = `${window.location.origin}${window.location.pathname}?tenant=${id}&u=${encodeURIComponent(t.username)}&h=${encodedHash}`;
   document.getElementById('tl-url').value = url;
   document.getElementById('tl-username').value = t.username;
   document.getElementById('tl-password').value = '(password hidden — set when created)';
@@ -2126,11 +2131,51 @@ async function doLogin() {
   }
 
   // ── 3. Check client tenant logins
+  // First try localStorage (admin's browser has all tenants)
   const tenants = getTenants();
-  const tenant = tenants.find(t => t.username === username && t.passwordHash === hash);
+  let tenant = tenants.find(t => t.username === username && t.passwordHash === hash);
+
+  // If not found in localStorage (fresh browser / incognito),
+  // try the URL-embedded credentials (?tenant=ID&u=username&h=base64hash)
+  if (!tenant) {
+    const up = new URLSearchParams(window.location.search);
+    const urlTenantId = up.get('tenant');
+    const urlU        = up.get('u');
+    const urlH        = up.get('h'); // base64url-encoded SHA-256 hash
+    if (urlTenantId && urlU && urlH && urlU === username) {
+      // Decode the base64url back to hex hash
+      const b64 = urlH.replace(/-/g,'+').replace(/_/g,'/');
+      let decodedHash = '';
+      try {
+        const raw = atob(b64);
+        decodedHash = raw; // raw IS the hex hash string stored as base64
+      } catch(e) { decodedHash = ''; }
+      if (decodedHash === hash) {
+        // Valid — create a synthetic tenant object from URL params
+        // Load any existing tenant data they may have saved in this browser
+        const storedTenantData = JSON.parse(localStorage.getItem(getTenantDataKey(urlTenantId))||'{}');
+        tenant = {
+          id: urlTenantId,
+          username: urlU,
+          company: storedTenantData?.settings?.company || urlU,
+          email: storedTenantData?.settings?.email || '',
+          passwordHash: hash,
+          status: 'active'
+        };
+        // Cache this tenant in localStorage for future logins from this browser
+        const existingTenants = getTenants();
+        if (!existingTenants.find(t=>t.id===urlTenantId)) {
+          existingTenants.push(tenant);
+          saveTenants(existingTenants);
+        }
+      }
+    }
+  }
+
   if (tenant) {
     if (tenant.status === 'suspended') {
-      errEl.textContent = 'Your portal has been suspended. Please contact Sofire-IT Support.';
+      const adminContact = getTenants().length ? '' : '';
+    errEl.textContent = 'Your portal has been suspended. Please contact your CRM provider.';
       errEl.classList.add('show'); return;
     }
     window.CURRENT_DATA_KEY = getTenantDataKey(tenant.id);
@@ -2152,18 +2197,41 @@ function doLogout() {
   showLogin();
 }
 
-function showLogin() {
+function showLogin(tenantOverride) {
   document.getElementById('login-screen').classList.add('show');
   document.querySelector('.app').style.display = 'none';
   document.getElementById('share-view').classList.remove('show');
-  // Prefill company branding on login screen
+
+  // Use tenant branding if available (tenantOverride = tenant object from URL param)
+  // otherwise fall back to admin's settings or generic
+  const t = tenantOverride;
   const s = state.settings;
-  document.getElementById('login-company-name').textContent = s.company ? s.company.split('(')[0].trim() : 'Sofire-IT Support';
-  if (s.logoData) {
+  const tenantData = t ? JSON.parse(localStorage.getItem(getTenantDataKey(t.id))||'{}') : null;
+  const ts = tenantData?.settings || {};
+
+  // Company name: tenant's saved settings > tenant company name > admin settings > generic
+  const name = ts.company
+    ? ts.company.split('(')[0].trim()
+    : (t?.company ? t.company.split('(')[0].trim()
+    : (s.company ? s.company.split('(')[0].trim() : 'Sofire-IT Support'));
+
+  document.getElementById('login-company-name').textContent = name;
+
+  // Update footer
+  const footer = document.querySelector('.login-footer');
+  if(footer) footer.textContent = name + ' — Private CRM';
+
+  // Logo: tenant's saved logo > admin logo
+  const logoData = ts.logoData || (t ? null : s.logoData);
+  if(logoData){
     document.getElementById('login-logo-emoji').style.display = 'none';
-    document.getElementById('login-logo-img').src = s.logoData;
+    document.getElementById('login-logo-img').src = logoData;
     document.getElementById('login-logo-img').style.display = 'block';
+  } else {
+    document.getElementById('login-logo-emoji').style.display = '';
+    document.getElementById('login-logo-img').style.display = 'none';
   }
+
   setTimeout(() => document.getElementById('login-username').focus(), 100);
 }
 
@@ -2185,6 +2253,12 @@ function showApp() {
     const retBtn = document.getElementById('btn-return-admin');
     if(retBtn) retBtn.style.display = localStorage.getItem('sofire_admin_return') ? 'flex' : 'none';
   }
+  // Update browser tab title
+  const _s = state.settings;
+  const _sess = getSession();
+  const _co = _s.company ? _s.company.split('(')[0].trim() : (_sess?.tenantName||'Invoice CRM');
+  document.title = _co + ' — CRM';
+  updateSidebarBranding();  // re-run after load() so tenant's own settings are used
   applyRoleRestrictions();
   renderDashboard();
 }
@@ -2531,13 +2605,33 @@ function saveSettings(){
   toast('Settings saved ✓','success');
 }
 function updateSidebarBranding(){
-  const s=state.settings;
-  document.getElementById('sidebar-company-name').textContent=s.company.split('(')[0].trim();
-  document.getElementById('sidebar-contact').innerHTML=`${s.owner||'Owner'}<br>${s.email||''}`;
+  const s = state.settings;
+  const sess = getSession();
+  const isTenant = !!sess?.tenantId;
+
+  // For tenants: use their own company name from their settings
+  // For admin: use Sofire-IT (or custom if they set one)
+  const companyName = s.company
+    ? s.company.split('(')[0].trim()
+    : (isTenant ? (sess.tenantName||sess.name||'My CRM') : 'Sofire-IT Support');
+
+  document.getElementById('sidebar-company-name').textContent = companyName;
+  // Also update browser tab and CRM sub-label
+  const titleEl = document.getElementById('page-title');
+  if(titleEl) titleEl.textContent = companyName + ' — CRM';
+  document.title = companyName + ' — CRM';
+
+  // Sidebar user info
+  const nameEl  = document.getElementById('sidebar-user-name');
+  const emailEl = document.getElementById('sidebar-user-email');
+  if(nameEl)  nameEl.textContent  = sess?.name  || sess?.username || (s.owner||'');
+  if(emailEl) emailEl.textContent = sess?.email || (s.email||'');
+
+  // Logo
   if(s.logoData){
     document.getElementById('sidebar-logo-emoji').style.display='none';
     const img=document.getElementById('sidebar-logo-img');
-    img.src=s.logoData;img.style.display='block';
+    img.src=s.logoData; img.style.display='block';
   } else {
     document.getElementById('sidebar-logo-emoji').style.display='';
     document.getElementById('sidebar-logo-img').style.display='none';
@@ -4558,16 +4652,15 @@ load();
 if (shareType && shareData) {
   showShareView(shareType, shareData);
 } else if (tenantParam) {
-  // Pre-fill login username hint for a tenant link
-  showLogin();
-  const t = getTenants().find(x=>x.id===tenantParam);
-  if(t) {
-    document.getElementById('login-username').value = t.username;
+  // Tenant login link — works in any browser including incognito
+  const urlUsername = urlParams.get('u') || '';
+  const tenantObj = getTenants().find(x=>x.id===tenantParam) || { id: tenantParam, company: '', username: urlUsername };
+  showLogin(tenantObj);  // passes tenant for branding
+  // Pre-fill username from URL
+  const displayUsername = urlUsername || tenantObj.username || '';
+  if (displayUsername) {
+    document.getElementById('login-username').value = displayUsername;
     document.getElementById('login-password').focus();
-    // Update login branding to tenant company if they have settings
-    const td = JSON.parse(localStorage.getItem(getTenantDataKey(t.id))||'{}');
-    if(td.settings?.company) document.getElementById('login-company-name').textContent = td.settings.company.split('(')[0].trim();
-    if(td.settings?.logoData) { document.getElementById('login-logo-emoji').style.display='none'; const img=document.getElementById('login-logo-img'); img.src=td.settings.logoData; img.style.display='block'; }
   }
 } else if (isLoggedIn()) {
   showApp();
