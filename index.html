@@ -3082,6 +3082,7 @@ function selectInvStyle(style, el) {
   document.querySelectorAll('#inv-style-options .inv-style-opt').forEach(e => e.classList.remove('active'));
   if (el) el.classList.add('active');
   updateInvDesignPreview();
+  updatePreview();
 }
 
 function selectInvColor(color, el, fromPicker) {
@@ -3093,6 +3094,7 @@ function selectInvColor(color, el, fromPicker) {
   if (picker) picker.value = color;
   if (label)  label.textContent = color;
   updateInvDesignPreview();
+  updatePreview();
 }
 
 function selectInvFont(font, el) {
@@ -3100,6 +3102,7 @@ function selectInvFont(font, el) {
   document.querySelectorAll('#inv-font-options .font-option').forEach(e => e.classList.remove('active'));
   if (el) el.classList.add('active');
   updateInvDesignPreview();
+  updatePreview();
 }
 
 function updateInvDesignPreview() {
@@ -3550,6 +3553,56 @@ function fmtDate(d){
 function updatePreview(){
   const s=state.settings;
   const num=document.getElementById('inv-number')?.value||'';
+
+  // Apply invoice design settings to the live preview
+  const invColor = s.invAccentColor || '#e03030';
+  const invFont  = s.invFont        || 'Helvetica Neue';
+  const invStyle = s.invStyle       || 'classic';
+
+  // Font
+  const previewEl = document.getElementById('invoice-preview');
+  if(previewEl) previewEl.style.fontFamily = `'${invFont}',Helvetica,Arial,sans-serif`;
+
+  // Table header background + color based on style
+  const theadRow = document.querySelector('.preview-table thead tr');
+  const ths      = document.querySelectorAll('.preview-table thead th');
+  if(theadRow && ths.length){
+    if(invStyle === 'classic' || invStyle === 'modern'){
+      theadRow.style.background = invColor;
+      theadRow.style.borderBottom = 'none';
+      ths.forEach(th => { th.style.color = '#fff'; });
+    } else if(invStyle === 'minimal'){
+      theadRow.style.background = '#f9f9f9';
+      theadRow.style.borderBottom = `2px solid ${invColor}`;
+      ths.forEach(th => { th.style.color = '#333'; });
+    } else if(invStyle === 'bold'){
+      theadRow.style.background = invColor;
+      theadRow.style.borderBottom = 'none';
+      ths.forEach(th => { th.style.color = '#fff'; });
+    }
+  }
+
+  // Amount due row color
+  const adLabel = document.querySelector('.amount-due-row .ad-label');
+  const adVal   = document.querySelector('.amount-due-row .ad-val');
+  const adRow   = document.querySelector('.amount-due-row');
+  if(adLabel) adLabel.style.color = invColor;
+  if(adVal)   adVal.style.color   = invColor;
+  if(adRow)   adRow.style.borderTop = `2px solid ${invColor}`;
+
+  // Sub-item color
+  document.querySelectorAll('.item-sub').forEach(el => { el.style.color = invColor; });
+
+  // Bold sidebar left bar
+  if(previewEl){
+    if(invStyle === 'bold'){
+      previewEl.style.borderLeft = `6px solid ${invColor}`;
+      previewEl.style.paddingLeft = '20px';
+    } else {
+      previewEl.style.borderLeft = '';
+      previewEl.style.paddingLeft = '';
+    }
+  }
   const date=document.getElementById('inv-date')?.value||'';
   const due=document.getElementById('inv-due')?.value||'';
 
@@ -3997,11 +4050,12 @@ async function generateInvoicePDF(inv, s) {
 
   // Build the invoice HTML into a hidden off-screen container
   const container = document.createElement('div');
+  const printFont = s.invFont || 'Helvetica Neue';
   container.style.cssText = [
     'position:fixed', 'left:-9999px', 'top:0',
-    'width:794px',          // A4 at 96dpi ≈ 794px
+    'width:794px',
     'background:#ffffff',
-    'font-family:Helvetica Neue,Arial,sans-serif',
+    `font-family:'${printFont}',Helvetica,Arial,sans-serif`,
     'font-size:12px', 'color:#1a1a1a',
     'padding:40px 48px',
     'box-sizing:border-box',
@@ -4971,21 +5025,19 @@ function viewInvoice(id){
   // Build completely isolated white invoice — override ALL dark theme styles
   const statusColor = inv.status==='paid'?'#065f46':inv.status==='overdue'?'#991b1b':'#854d0e';
   const statusBg    = inv.status==='paid'?'#d1fae5':inv.status==='overdue'?'#fee2e2':'#fef9c3';
+  // Get the user's invoice font setting for the wrapper
+  const invViewFont = s.invFont || 'Helvetica Neue';
   document.getElementById('invoice-view-body').innerHTML = `
     <style>
-      #inv-view-wrap, #inv-view-wrap * {
-        color: inherit !important;
-        background: transparent !important;
-        border-color: inherit !important;
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
-      }
+      /* Only force white bg and dark text on the wrapper — do NOT override inline styles on children */
+      #inv-view-wrap { background:#ffffff !important; color:#1a1a1a !important; }
       #inv-view-wrap table { border-collapse: collapse !important; }
     </style>
     <div id="inv-view-wrap" style="
       background:#ffffff !important;
       color:#1a1a1a !important;
       padding:36px 40px 28px;
-      font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
+      font-family:'${invViewFont}',Helvetica,Arial,sans-serif;
       font-size:13px;
       line-height:1.5;
       box-sizing:border-box;
