@@ -936,6 +936,14 @@ textarea{resize:vertical;min-height:70px}
 </div>
 
 <div class="content page" id="page-settings">
+  <!-- Tenant welcome banner — shown only when logged in as tenant -->
+  <div id="tenant-settings-banner" style="display:none;background:rgba(74,158,255,.08);border:1px solid rgba(74,158,255,.25);border-radius:10px;padding:16px 20px;margin-bottom:18px">
+    <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;margin-bottom:6px;color:var(--blue)">⚙ Your CRM Settings</div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.7">
+      Set up your company branding, banking details, invoice terms and tax settings. Everything here will appear on invoices you send to your clients.
+      Your logo, company name and details will replace any generic branding throughout the CRM.
+    </div>
+  </div>
   <div class="settings-section">
     <div class="settings-header">Company Branding</div>
     <div class="settings-body">
@@ -975,7 +983,7 @@ textarea{resize:vertical;min-height:70px}
       </div>
     </div>
   </div>
-  <div class="settings-section">
+  <div class="settings-section" id="settings-smtp-section">
     <div class="settings-header">Email — Netlify SMTP Function</div>
     <div class="settings-body">
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px;font-size:12px;color:var(--text2);line-height:1.9">
@@ -1032,7 +1040,7 @@ textarea{resize:vertical;min-height:70px}
       </div>
     </div>
   </div>
-  <div class="settings-section">
+  <div class="settings-section" id="settings-account-section">
     <div class="settings-header">Account & Security</div>
     <div class="settings-body">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
@@ -1042,7 +1050,7 @@ textarea{resize:vertical;min-height:70px}
         </div>
         <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px">
           <div style="font-size:12px;font-weight:500;margin-bottom:2px">Role</div>
-          <div style="font-size:13px;color:var(--green)">Administrator</div>
+          <div style="font-size:13px;color:var(--green)" id="settings-role-label">Administrator</div>
         </div>
       </div>
       <div style="font-size:12px;font-weight:500;margin-bottom:12px;color:var(--text2)">Change Password</div>
@@ -1054,11 +1062,13 @@ textarea{resize:vertical;min-height:70px}
       <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="handleChangePassword()">Update Password</button>
     </div>
   </div>
-  <div style="display:flex;gap:10px;margin-top:4px">
+  <div style="display:flex;gap:10px;margin-top:4px;flex-wrap:wrap">
     <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
-    <button class="btn btn-ghost" onclick="exportData()">⬇ Export All Data</button>
-    <button class="btn btn-ghost" onclick="importData()">⬆ Import Backup</button>
-    <button class="btn btn-ghost" style="color:var(--yellow)" onclick="resetAndSeed()">📥 Load FY2026 Spreadsheet Data</button>
+    <span id="settings-data-section" style="display:contents">
+      <button class="btn btn-ghost" onclick="exportData()">⬇ Export All Data</button>
+      <button class="btn btn-ghost" onclick="importData()">⬆ Import Backup</button>
+      <button class="btn btn-ghost" style="color:var(--yellow)" onclick="resetAndSeed()">📥 Load FY2026 Spreadsheet Data</button>
+    </span>
     <input type="file" id="import-file" accept=".json" style="display:none" onchange="handleImport(this)">
   </div>
 </div>
@@ -1661,9 +1671,11 @@ function applyRoleRestrictions() {
   const cpNav = document.getElementById('nav-controlpanel');
   if (cpNav) cpNav.style.display = perm.canControlPanel ? '' : 'none';
 
-  // Hide settings nav for non-admins
+  // Settings: visible to superadmin AND tenant admins (they need it to set their own company details)
   const settingsNav = document.querySelector('[data-page="settings"]');
-  if (settingsNav) settingsNav.style.display = perm.canSettings ? '' : 'none';
+  const sess2 = getSession();
+  const canSeeSettings = perm.canSettings || (role === 'admin' && sess2?.tenantId);
+  if (settingsNav) settingsNav.style.display = canSeeSettings ? '' : 'none';
 
   // Disable all ＋ / Edit / Delete buttons for viewers
   if (!perm.canEdit) {
@@ -2078,7 +2090,16 @@ function getSession() {
   } catch { return null; }
 }
 function setSession(user, remember) {
-  const session = { username: user.username, name: user.name, email: user.email, role: user.role, ts: Date.now() };
+  const session = {
+    username: user.username,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    ts: Date.now(),
+    // Preserve tenant fields so refresh doesn't lose the namespace
+    tenantId: user.tenantId || null,
+    tenantName: user.tenantName || null,
+  };
   sessionStorage.setItem('sofire_session', JSON.stringify(session));
   if (remember) localStorage.setItem('sofire_session_remember', JSON.stringify(session));
 }
@@ -2087,18 +2108,23 @@ function clearSession() {
   localStorage.removeItem('sofire_session_remember');
 }
 function isLoggedIn() {
-  const s = getSession();
-  if (!s) return false;
-  // Session expires after 12 hours if not remembered
-  if (!localStorage.getItem('sofire_session_remember') && Date.now() - s.ts > 12 * 3600 * 1000) {
-    clearSession(); return false;
+  let s = getSession();
+  // If sessionStorage is empty (e.g. after browser refresh), restore from localStorage
+  if (!s) {
+    const remembered = localStorage.getItem('sofire_session_remember');
+    if (remembered) {
+      try {
+        s = JSON.parse(remembered);
+        sessionStorage.setItem('sofire_session', remembered); // restore to sessionStorage
+      } catch { return false; }
+    }
   }
+  if (!s) return false;
   // Auto-upgrade stale sessions: juan always gets superadmin
   if (s.username === 'juan' && s.role !== 'superadmin') {
     s.role = 'superadmin';
     sessionStorage.setItem('sofire_session', JSON.stringify(s));
-    const rem = localStorage.getItem('sofire_session_remember');
-    if (rem) localStorage.setItem('sofire_session_remember', JSON.stringify(s));
+    localStorage.setItem('sofire_session_remember', JSON.stringify(s));
   }
   return true;
 }
@@ -2467,11 +2493,26 @@ function showShareView(type, encodedData) {
 async function changePassword(currentPw, newPw, confirmPw) {
   if (newPw !== confirmPw) { toast('New passwords do not match', 'error'); return false; }
   if (newPw.length < 8) { toast('Password must be at least 8 characters', 'error'); return false; }
+  const currentHash = await sha256(currentPw);
+  const newHash = await sha256(newPw);
+  const sess = getSession();
+
+  // Tenant password change
+  if (sess?.tenantId) {
+    const tenants = getTenants();
+    const idx = tenants.findIndex(t => t.id === sess.tenantId);
+    if (idx < 0) { toast('Tenant not found', 'error'); return false; }
+    if (currentHash !== tenants[idx].passwordHash) { toast('Current password is incorrect', 'error'); return false; }
+    tenants[idx].passwordHash = newHash;
+    saveTenants(tenants);
+    toast('Password changed ✓ — your new password is active', 'success');
+    return true;
+  }
+
+  // Admin / internal user password change
   const stored = JSON.parse(localStorage.getItem('sofire_credentials') || 'null');
   const creds = stored || ADMIN_USER;
-  const currentHash = await sha256(currentPw);
   if (currentHash !== creds.passwordHash) { toast('Current password is incorrect', 'error'); return false; }
-  const newHash = await sha256(newPw);
   const newCreds = { ...creds, passwordHash: newHash, role: 'superadmin' };
   localStorage.setItem('sofire_credentials', JSON.stringify(newCreds));
   toast('Password changed successfully ✓', 'success');
@@ -2607,7 +2648,30 @@ document.querySelectorAll('.nav-item').forEach(item=>item.addEventListener('clic
 function loadSettings(){
   const s=state.settings;
   const sess=getSession();
-  if(sess&&document.getElementById('settings-logged-in-user'))document.getElementById('settings-logged-in-user').textContent=sess.name||sess.username||'juan';
+  const isTenant = !!sess?.tenantId;
+
+  // Logged-in user display
+  if(document.getElementById('settings-logged-in-user'))
+    document.getElementById('settings-logged-in-user').textContent = sess?.name||sess?.username||'juan';
+
+  // Show/hide sections based on whether user is a tenant or admin
+  const tenantBanner = document.getElementById('tenant-settings-banner');
+  if(tenantBanner) tenantBanner.style.display = isTenant ? 'block' : 'none';
+
+  // Hide admin-only sections from tenants
+  const smtpSection = document.getElementById('settings-smtp-section');
+  if(smtpSection) smtpSection.style.display = isTenant ? 'none' : '';
+
+  const dataSection = document.getElementById('settings-data-section');
+  if(dataSection) dataSection.style.display = isTenant ? 'none' : '';
+
+  // Account & Security — show to tenants too (they need password change)
+  const accountSection = document.getElementById('settings-account-section');
+  if(accountSection) accountSection.style.display = '';
+
+  // Update account section role label for tenants
+  const roleLabel = document.getElementById('settings-role-label');
+  if(roleLabel) roleLabel.textContent = isTenant ? 'Portal Admin' : (ROLES[sess?.role]?.label || 'Admin');
   const setV=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v||''};
   setV('set-company',s.company);setV('set-tagline',s.tagline);setV('set-owner',s.owner);
   setV('set-phone',s.phone);setV('set-email',s.email);setV('set-website',s.website);setV('set-address',s.address);
@@ -4672,47 +4736,61 @@ const tenantParam = urlParams.get('tenant'); // direct tenant login link
 //   3. Admin return token  → handled by loginAsTenant flow
 //   4. Default             → your main sofire_crm2
 (function initDataKey(){
-  // If there's a ?tenant= in the URL, ALWAYS use that namespace
-  // This ensures incognito/fresh browsers NEVER see the admin's data
+  // 1. URL has ?tenant= → always use that namespace (incognito safe)
   if (tenantParam) {
     window.CURRENT_DATA_KEY = getTenantDataKey(tenantParam);
     return;
   }
+  // 2. Check session (sessionStorage + localStorage remember)
   const sess = getSession();
   if (sess?.tenantId) {
     window.CURRENT_DATA_KEY = getTenantDataKey(sess.tenantId);
-  } else {
-    window.CURRENT_DATA_KEY = 'sofire_crm2';
+    return;
   }
+  // 3. Default to admin namespace
+  window.CURRENT_DATA_KEY = 'sofire_crm2';
 })();
 
 // Load state using the correct namespace
 load();
 
+// Run isLoggedIn() NOW — this restores the session from localStorage into
+// sessionStorage if sessionStorage was cleared by a page refresh.
+// Must happen before any routing decision that calls getSession().
+const _loggedIn = isLoggedIn();
+
 if (shareType && shareData) {
   showShareView(shareType, shareData);
 
 } else if (tenantParam) {
-  // Tenant login URL — show login with tenant branding, never show admin data
   const urlUsername = urlParams.get('u') || '';
-  const tenantObj = getTenants().find(x=>x.id===tenantParam) || { id: tenantParam, company: '', username: urlUsername };
-
-  // Check if already logged in as THIS tenant (e.g. returning to the tab)
+  // Build tenant object — works even in fresh browsers with no localStorage tenants
+  const tenantObj = getTenants().find(x=>x.id===tenantParam) || {
+    id: tenantParam, company: state.settings?.company || '', username: urlUsername
+  };
+  // getSession() now reliably returns the session (restored from localStorage above)
   const sess = getSession();
-  if (sess?.tenantId === tenantParam) {
+
+  if (_loggedIn && sess?.tenantId === tenantParam) {
+    // ✓ Already logged in as this exact tenant (handles page refresh correctly)
     showApp();
-  } else {
-    // Not logged in — clear any stale session and show login
+  } else if (_loggedIn && sess?.tenantId && sess.tenantId !== tenantParam) {
+    // Logged in as a DIFFERENT tenant — clear that session, show login for this URL
     clearSession();
     showLogin(tenantObj);
-    const displayUsername = urlUsername || tenantObj.username || '';
-    if (displayUsername) {
-      document.getElementById('login-username').value = displayUsername;
-      document.getElementById('login-password').focus();
-    }
+    const u = urlUsername || tenantObj.username || '';
+    if (u) { document.getElementById('login-username').value = u; document.getElementById('login-password').focus(); }
+  } else if (_loggedIn && !sess?.tenantId) {
+    // Admin/internal user visiting a tenant URL — show app (they stay in their own namespace)
+    showApp();
+  } else {
+    // Not logged in — show tenant login screen with correct branding
+    showLogin(tenantObj);
+    const u = urlUsername || tenantObj.username || '';
+    if (u) { document.getElementById('login-username').value = u; document.getElementById('login-password').focus(); }
   }
 
-} else if (isLoggedIn()) {
+} else if (_loggedIn) {
   showApp();
 } else {
   showLogin();
