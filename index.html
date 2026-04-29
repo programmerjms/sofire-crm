@@ -1485,8 +1485,21 @@ textarea{resize:vertical;min-height:70px}
         <div class="form-group"><label>Contact Person *</label><input type="text" id="nt-contact" placeholder="e.g. John Smith"></div>
         <div class="form-group"><label>Contact Email *</label><input type="email" id="nt-email" placeholder="john@abccompany.co.za"></div>
         <div class="form-group"><label>Contact Phone</label><input type="text" id="nt-phone" placeholder="+27 12 345 6789"></div>
-        <div class="form-group"><label>Admin Username *</label><input type="text" id="nt-username" placeholder="e.g. abcadmin" autocomplete="off"></div>
-        <div class="form-group"><label>Admin Password *</label><input type="password" id="nt-password" placeholder="Min 8 characters" autocomplete="new-password"></div>
+        <div class="form-group">
+          <label>Admin Username *</label>
+          <!-- Hidden dummy fields to defeat browser autofill -->
+          <input type="text" name="prevent_autofill" style="display:none" tabindex="-1">
+          <input type="text" id="nt-username" placeholder="e.g. abcadmin"
+            autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+            oninput="updateTenantUsernamePreview()">
+          <div style="font-size:10px;color:var(--text3);margin-top:4px" id="nt-username-preview"></div>
+        </div>
+        <div class="form-group">
+          <label>Admin Password *</label>
+          <input type="password" id="nt-password" placeholder="Min 8 characters"
+            autocomplete="new-password">
+          <div style="font-size:10px;color:var(--text3);margin-top:4px">Min 8 characters. Client will use this to log in.</div>
+        </div>
         <div class="form-group"><label>Monthly Retainer (R)</label><input type="number" id="nt-retainer" placeholder="500.00" step="0.01"></div>
         <div class="form-group"><label>Status</label>
           <select id="nt-status">
@@ -1528,7 +1541,8 @@ textarea{resize:vertical;min-height:70px}
         <div class="form-group"><label>Username</label><input type="text" id="tl-username" readonly style="background:var(--surface3)"></div>
         <div class="form-group"><label>Password</label><input type="text" id="tl-password" readonly style="background:var(--surface3)"></div>
       </div>
-      <p style="font-size:11px;color:var(--text3);margin-top:12px;line-height:1.6">⚠ Ask your client to change their password after first login. The password shown here is only visible now.</p>
+      <p style="font-size:11px;color:var(--text3);margin-top:12px;line-height:1.6">⚠ These are the exact credentials that were saved. The password is only shown once — copy it now before closing. Ask your client to change their password after first login.</p>
+      <div id="tl-verify-warning" style="display:none;margin-top:8px;padding:9px 12px;background:rgba(255,194,74,.1);border:1px solid rgba(255,194,74,.3);border-radius:7px;font-size:11px;color:var(--yellow)"></div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('tenant-link-modal')">Close</button>
@@ -1855,20 +1869,32 @@ async function saveNewUser() {
 }
 
 // ── Tenant management
+function updateTenantUsernamePreview(){
+  const val = document.getElementById('nt-username').value.trim().toLowerCase();
+  const prev = document.getElementById('nt-username-preview');
+  if(prev) prev.textContent = val ? `Login URL: ${window.location.origin}${window.location.pathname}?tenant=… · Username: ${val}` : '';
+}
 function openNewTenantModal(editId) {
   editingTenantId = editId || null;
   const t = editId ? getTenants().find(x=>x.id===editId) : null;
   document.getElementById('new-tenant-modal-title').textContent = editId ? 'Edit Tenant' : 'Add Client Tenant';
-  document.getElementById('nt-company').value = t?.company||'';
-  document.getElementById('nt-contact').value = t?.contact||'';
-  document.getElementById('nt-email').value = t?.email||'';
-  document.getElementById('nt-phone').value = t?.phone||'';
-  document.getElementById('nt-username').value = t?.username||'';
-  document.getElementById('nt-password').value = '';
+  // Explicitly clear/set every field — prevent browser autofill from leaking values
+  document.getElementById('nt-company').value  = t?.company||'';
+  document.getElementById('nt-contact').value  = t?.contact||'';
+  document.getElementById('nt-email').value    = t?.email||'';
+  document.getElementById('nt-phone').value    = t?.phone||'';
   document.getElementById('nt-retainer').value = t?.retainer||'';
-  document.getElementById('nt-status').value = t?.status||'active';
-  document.getElementById('nt-notes').value = t?.notes||'';
-  document.getElementById('nt-error').style.display='none';
+  document.getElementById('nt-status').value   = t?.status||'active';
+  document.getElementById('nt-notes').value    = t?.notes||'';
+  document.getElementById('nt-error').style.display = 'none';
+  // Password always cleared
+  document.getElementById('nt-password').value = '';
+  // Set username LAST and with a short delay to defeat autofill race condition
+  setTimeout(() => {
+    const usernameEl = document.getElementById('nt-username');
+    usernameEl.value = t?.username||'';
+    updateTenantUsernamePreview();
+  }, 80);
   openModal('new-tenant-modal');
 }
 function editTenant(id) { openNewTenantModal(id); }
@@ -1893,7 +1919,10 @@ async function saveNewTenant() {
   const errEl    = document.getElementById('nt-error');
   const showErr  = msg => { errEl.textContent=msg; errEl.style.display='block'; };
 
-  if (!company||!contact||!username) return showErr('Company, contact name and username are required.');
+  if (!company||!contact) return showErr('Business name and contact name are required.');
+  if (!username) return showErr('Username is required. This is what the client will use to log in.');
+  if (!/^[a-z0-9_.-]+$/.test(username)) return showErr('Username can only contain lowercase letters, numbers, hyphens and dots. No spaces.');
+  if (username === 'juan' || username === 'admin') return showErr('"'+username+'" is a reserved username. Please choose another.');
   if (!editingTenantId && (!pw||pw.length<8)) return showErr('Password must be at least 8 characters.');
 
   const tenants = getTenants();
@@ -1927,6 +1956,17 @@ async function saveNewTenant() {
     document.getElementById('tl-url').value = url;
     document.getElementById('tl-username').value = username;
     document.getElementById('tl-password').value = pw;
+    // Verify warning if anything looks wrong
+    const warnEl = document.getElementById('tl-verify-warning');
+    if(warnEl) {
+      const readUsername = document.getElementById('tl-username').value;
+      if(readUsername !== username) {
+        warnEl.textContent = '⚠ Username mismatch detected — please verify the username above is correct before sending to client.';
+        warnEl.style.display = 'block';
+      } else {
+        warnEl.style.display = 'none';
+      }
+    }
     openModal('tenant-link-modal');
     renderCPTenants();
     toast('Tenant portal created ✓','success');
