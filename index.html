@@ -2116,7 +2116,16 @@ async function doLogin() {
   const adminCreds = stored || ADMIN_USER;
   if (username === adminCreds.username && hash === adminCreds.passwordHash) {
     window.CURRENT_DATA_KEY = 'sofire_crm2';
-    setSession({ ...adminCreds, role: 'superadmin', username: adminCreds.username, name: adminCreds.name||'Juan Du Plessis', email: adminCreds.email||'juan@sofire-it.co.za' }, true);
+    setSession({ ...adminCreds, role: 'superadmin', username: adminCreds.username,
+      name: adminCreds.name||'Juan Du Plessis', email: adminCreds.email||'juan@sofire-it.co.za' }, true);
+    // Reset and reload from admin namespace for clean state
+    state = { invoices:[], customers:[], payments:[], expenses:[], taxPayments:[],
+      nextInvNum: 202600001, editingId:null, editingExpId:null, editingCustId:null,
+      currentSendInvId:null, currentSendType:null,
+      settings:{ company:'', tagline:'', owner:'', phone:'', email:'', website:'', address:'',
+        bank:'', accHolder:'', accNum:'', branch:'', accType:'', taxNum:'', vatRate:15,
+        vatOnInvoices:false, fyStart:3, bkEmail:'', defaultRefundPolicy:'',
+        defaultClientObligations:'', logoData:null } };
     load(); showApp(); return;
   }
 
@@ -2124,9 +2133,17 @@ async function doLogin() {
   const users = getUsers();
   const internalUser = users.find(u => u.username === username && u.passwordHash === hash);
   if (internalUser) {
-    window.CURRENT_DATA_KEY = 'sofire_crm2'; // internal users see your data
+    window.CURRENT_DATA_KEY = 'sofire_crm2'; // internal users see admin's data
     setSession({ username: internalUser.username, name: internalUser.name,
       email: internalUser.email, role: internalUser.role }, true);
+    // Reset and reload from admin namespace to ensure clean state
+    state = { invoices:[], customers:[], payments:[], expenses:[], taxPayments:[],
+      nextInvNum: 202600001, editingId:null, editingExpId:null, editingCustId:null,
+      currentSendInvId:null, currentSendType:null,
+      settings:{ company:'', tagline:'', owner:'', phone:'', email:'', website:'', address:'',
+        bank:'', accHolder:'', accNum:'', branch:'', accType:'', taxNum:'', vatRate:15,
+        vatOnInvoices:false, fyStart:3, bkEmail:'', defaultRefundPolicy:'',
+        defaultClientObligations:'', logoData:null } };
     load(); showApp(); return;
   }
 
@@ -2174,14 +2191,30 @@ async function doLogin() {
 
   if (tenant) {
     if (tenant.status === 'suspended') {
-      const adminContact = getTenants().length ? '' : '';
-    errEl.textContent = 'Your portal has been suspended. Please contact your CRM provider.';
+      errEl.textContent = 'Your portal has been suspended. Please contact your CRM provider.';
       errEl.classList.add('show'); return;
     }
+    // Set tenant namespace
     window.CURRENT_DATA_KEY = getTenantDataKey(tenant.id);
     setSession({ username: tenant.username, name: tenant.company, email: tenant.email,
       role: 'admin', tenantId: tenant.id, tenantName: tenant.company }, true);
-    load(); showApp(); return;
+    // Reset state completely — prevents admin data from bleeding into tenant view
+    state = {
+      invoices:[], customers:[], payments:[], expenses:[], taxPayments:[],
+      nextInvNum: 202600001, editingId:null, editingExpId:null, editingCustId:null,
+      currentSendInvId:null, currentSendType:null,
+      settings:{
+        company: tenant.company || '', tagline:'', owner: tenant.contact || '',
+        phone: tenant.phone || '', email: tenant.email || '',
+        website:'', address:'', bank:'', accHolder:'', accNum:'', branch:'', accType:'',
+        taxNum:'', vatRate:15, vatOnInvoices:false, fyStart:3, bkEmail:'',
+        defaultRefundPolicy:'', defaultClientObligations:'', logoData:null
+      }
+    };
+    // Load their saved data (overwrites defaults if they have any)
+    load();
+    showApp();
+    return;
   }
 
   // ── No match
@@ -4632,36 +4665,53 @@ const shareType  = urlParams.get('share');
 const shareData  = urlParams.get('data');
 const tenantParam = urlParams.get('tenant'); // direct tenant login link
 
-// Set CURRENT_DATA_KEY from session BEFORE calling load()
-// so tenants load their own data, not the admin's
+// ── Set CURRENT_DATA_KEY IMMEDIATELY — before ANY load() call
+// Priority order:
+//   1. ?tenant= URL param  → always use tenant namespace (incognito safe)
+//   2. Existing session    → use session's tenant namespace
+//   3. Admin return token  → handled by loginAsTenant flow
+//   4. Default             → your main sofire_crm2
 (function initDataKey(){
+  // If there's a ?tenant= in the URL, ALWAYS use that namespace
+  // This ensures incognito/fresh browsers NEVER see the admin's data
+  if (tenantParam) {
+    window.CURRENT_DATA_KEY = getTenantDataKey(tenantParam);
+    return;
+  }
   const sess = getSession();
   if (sess?.tenantId) {
     window.CURRENT_DATA_KEY = getTenantDataKey(sess.tenantId);
-  } else if (localStorage.getItem('sofire_admin_return')) {
-    // Admin is viewing a tenant — key was set before reload
-    // keep whatever was set
   } else {
     window.CURRENT_DATA_KEY = 'sofire_crm2';
   }
 })();
 
-// Re-load state with correct key
+// Load state using the correct namespace
 load();
 
 if (shareType && shareData) {
   showShareView(shareType, shareData);
+
 } else if (tenantParam) {
-  // Tenant login link — works in any browser including incognito
+  // Tenant login URL — show login with tenant branding, never show admin data
   const urlUsername = urlParams.get('u') || '';
   const tenantObj = getTenants().find(x=>x.id===tenantParam) || { id: tenantParam, company: '', username: urlUsername };
-  showLogin(tenantObj);  // passes tenant for branding
-  // Pre-fill username from URL
-  const displayUsername = urlUsername || tenantObj.username || '';
-  if (displayUsername) {
-    document.getElementById('login-username').value = displayUsername;
-    document.getElementById('login-password').focus();
+
+  // Check if already logged in as THIS tenant (e.g. returning to the tab)
+  const sess = getSession();
+  if (sess?.tenantId === tenantParam) {
+    showApp();
+  } else {
+    // Not logged in — clear any stale session and show login
+    clearSession();
+    showLogin(tenantObj);
+    const displayUsername = urlUsername || tenantObj.username || '';
+    if (displayUsername) {
+      document.getElementById('login-username').value = displayUsername;
+      document.getElementById('login-password').focus();
+    }
   }
+
 } else if (isLoggedIn()) {
   showApp();
 } else {
