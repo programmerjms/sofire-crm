@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title id="page-title">Invoice CRM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&family=Inter:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600;700&family=Raleway:wght@400;500;600;700&family=Playfair+Display:wght@400;600;700&family=Space+Grotesk:wght@300;400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 :root {
@@ -14,7 +14,21 @@
   --text:#f0f0f5;--text2:#9090a8;--text3:#5a5a72;
   --green:#2dda8c;--yellow:#ffc24a;--blue:#4a9eff;--purple:#a78bfa;
   --radius:10px;--shadow:0 4px 24px rgba(0,0,0,0.4);
+  /* Theme customizer overrides — set by applyTheme() */
+  --theme-accent:var(--accent);
+  --theme-font:'DM Sans',sans-serif;
+  --theme-heading-font:'Syne',sans-serif;
 }
+/* Color swatch picker */
+.color-swatch{width:30px;height:30px;border-radius:6px;border:2px solid transparent;cursor:pointer;transition:all .15s;display:inline-block}
+.color-swatch.active,.color-swatch:hover{border-color:var(--text);transform:scale(1.1)}
+.font-option{padding:7px 12px;border-radius:7px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--surface2);transition:all .15s;white-space:nowrap}
+.font-option.active,.font-option:hover{border-color:var(--accent);background:var(--accentglow)}
+.theme-preview-box{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-top:12px}
+/* Invoice style presets */
+.inv-style-opt{border:2px solid var(--border);border-radius:8px;padding:10px;cursor:pointer;transition:all .15s;text-align:center;font-size:11px;color:var(--text2)}
+.inv-style-opt.active,.inv-style-opt:hover{border-color:var(--accent);color:var(--text)}
+.inv-style-opt svg{display:block;margin:0 auto 6px}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
 /* LOGIN */
@@ -1040,6 +1054,242 @@ textarea{resize:vertical;min-height:70px}
       </div>
     </div>
   </div>
+  <!-- ═══════════════════════════════════════════════════
+       THEME & INVOICE CUSTOMIZER
+  ═══════════════════════════════════════════════════ -->
+  <div class="settings-section" id="settings-theme-section">
+    <div class="settings-header">🎨 CRM Theme — Colors &amp; Fonts</div>
+    <div class="settings-body">
+
+      <!-- CRM Accent Color -->
+      <div class="form-group full" style="margin-bottom:18px">
+        <label style="margin-bottom:10px;display:block">CRM Accent Color <span style="font-size:10px;color:var(--text3)">(used for buttons, highlights, active states)</span></label>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <!-- Color palette -->
+          <div style="display:flex;gap:8px;flex-wrap:wrap" id="accent-swatches">
+            <div class="color-swatch" data-color="#ff3c3c" style="background:#ff3c3c" onclick="selectAccent('#ff3c3c',this)" title="Sofire Red"></div>
+            <div class="color-swatch" data-color="#ff6b35" style="background:#ff6b35" onclick="selectAccent('#ff6b35',this)" title="Ember Orange"></div>
+            <div class="color-swatch" data-color="#4a9eff" style="background:#4a9eff" onclick="selectAccent('#4a9eff',this)" title="Ocean Blue"></div>
+            <div class="color-swatch" data-color="#2dda8c" style="background:#2dda8c" onclick="selectAccent('#2dda8c',this)" title="Mint Green"></div>
+            <div class="color-swatch" data-color="#a78bfa" style="background:#a78bfa" onclick="selectAccent('#a78bfa',this)" title="Violet"></div>
+            <div class="color-swatch" data-color="#ffc24a" style="background:#ffc24a" onclick="selectAccent('#ffc24a',this)" title="Gold"></div>
+            <div class="color-swatch" data-color="#e879f9" style="background:#e879f9" onclick="selectAccent('#e879f9',this)" title="Fuchsia"></div>
+            <div class="color-swatch" data-color="#06b6d4" style="background:#06b6d4" onclick="selectAccent('#06b6d4',this)" title="Cyan"></div>
+            <div class="color-swatch" data-color="#f97316" style="background:#f97316" onclick="selectAccent('#f97316',this)" title="Tangerine"></div>
+            <div class="color-swatch" data-color="#84cc16" style="background:#84cc16" onclick="selectAccent('#84cc16',this)" title="Lime"></div>
+          </div>
+          <!-- Custom color picker -->
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="color" id="accent-custom-picker" value="#ff3c3c"
+              style="width:36px;height:36px;border:none;border-radius:6px;padding:0;cursor:pointer;background:none"
+              oninput="selectAccent(this.value,null,true)">
+            <span style="font-size:11px;color:var(--text3)">Custom</span>
+            <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text2)" id="accent-hex-label">#ff3c3c</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Background / Dark Mode Preset -->
+      <div class="form-group full" style="margin-bottom:18px">
+        <label style="margin-bottom:10px;display:block">CRM Color Theme</label>
+        <div style="display:flex;gap:10px;flex-wrap:wrap" id="bg-theme-options">
+          <div class="font-option active" data-bg="dark" onclick="selectBgTheme('dark',this)">🌑 Dark (default)</div>
+          <div class="font-option" data-bg="midnight" onclick="selectBgTheme('midnight',this)">🔵 Midnight Blue</div>
+          <div class="font-option" data-bg="forest" onclick="selectBgTheme('forest',this)">🌲 Forest Dark</div>
+          <div class="font-option" data-bg="slate" onclick="selectBgTheme('slate',this)">⬛ Slate</div>
+          <div class="font-option" data-bg="charcoal" onclick="selectBgTheme('charcoal',this)">🩶 Charcoal</div>
+        </div>
+      </div>
+
+      <!-- CRM Body Font -->
+      <div class="form-group full" style="margin-bottom:18px">
+        <label style="margin-bottom:10px;display:block">CRM Body Font</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap" id="body-font-options">
+          <div class="font-option active" data-font="DM Sans" onclick="selectFont('body','DM Sans',this)" style="font-family:'DM Sans'">DM Sans</div>
+          <div class="font-option" data-font="Inter" onclick="selectFont('body','Inter',this)" style="font-family:'Inter'">Inter</div>
+          <div class="font-option" data-font="Poppins" onclick="selectFont('body','Poppins',this)" style="font-family:'Poppins'">Poppins</div>
+          <div class="font-option" data-font="Space Grotesk" onclick="selectFont('body','Space Grotesk',this)" style="font-family:'Space Grotesk'">Space Grotesk</div>
+          <div class="font-option" data-font="IBM Plex Sans" onclick="selectFont('body','IBM Plex Sans',this)" style="font-family:'IBM Plex Sans'">IBM Plex Sans</div>
+          <div class="font-option" data-font="Raleway" onclick="selectFont('body','Raleway',this)" style="font-family:'Raleway'">Raleway</div>
+        </div>
+      </div>
+
+      <!-- CRM Heading Font -->
+      <div class="form-group full" style="margin-bottom:18px">
+        <label style="margin-bottom:10px;display:block">CRM Heading Font <span style="font-size:10px;color:var(--text3)">(company name, page titles, card headers)</span></label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap" id="heading-font-options">
+          <div class="font-option active" data-font="Syne" onclick="selectFont('heading','Syne',this)" style="font-family:'Syne';font-weight:700">Syne</div>
+          <div class="font-option" data-font="Poppins" onclick="selectFont('heading','Poppins',this)" style="font-family:'Poppins';font-weight:700">Poppins</div>
+          <div class="font-option" data-font="Raleway" onclick="selectFont('heading','Raleway',this)" style="font-family:'Raleway';font-weight:700">Raleway</div>
+          <div class="font-option" data-font="Playfair Display" onclick="selectFont('heading','Playfair Display',this)" style="font-family:'Playfair Display';font-weight:700">Playfair Display</div>
+          <div class="font-option" data-font="Space Grotesk" onclick="selectFont('heading','Space Grotesk',this)" style="font-family:'Space Grotesk';font-weight:700">Space Grotesk</div>
+          <div class="font-option" data-font="Inter" onclick="selectFont('heading','Inter',this)" style="font-family:'Inter';font-weight:700">Inter</div>
+        </div>
+      </div>
+
+      <!-- Border Radius -->
+      <div class="form-group" style="margin-bottom:0">
+        <label>Corner Radius <span style="font-size:10px;color:var(--text3)">(cards, buttons, modals)</span></label>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
+          <input type="range" id="radius-slider" min="0" max="20" value="10" step="1"
+            style="flex:1;accent-color:var(--accent)" oninput="selectRadius(this.value)">
+          <span style="font-family:'DM Mono',monospace;font-size:12px;width:36px" id="radius-label">10px</span>
+        </div>
+      </div>
+
+      <!-- Live preview -->
+      <div class="theme-preview-box" style="margin-top:16px">
+        <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px">Live Preview</div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button id="preview-btn-primary" style="background:var(--accent);color:#fff;border:none;padding:9px 18px;border-radius:var(--radius);font-family:var(--theme-font);font-size:13px;font-weight:600;cursor:default">Primary Button</button>
+          <button id="preview-btn-ghost" style="background:var(--surface2);color:var(--text2);border:1px solid var(--border);padding:9px 18px;border-radius:var(--radius);font-family:var(--theme-font);font-size:13px;cursor:default">Ghost Button</button>
+          <span id="preview-badge" style="background:var(--accentglow);color:var(--accent);padding:3px 10px;border-radius:20px;font-size:11px;font-family:'DM Mono',monospace">● Active</span>
+          <span id="preview-heading" style="font-family:var(--theme-heading-font);font-weight:700;font-size:15px">Company Name</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- INVOICE DESIGN -->
+  <div class="settings-section" id="settings-invoice-design-section">
+    <div class="settings-header">🧾 Invoice Design</div>
+    <div class="settings-body">
+
+      <!-- Invoice layout style -->
+      <div class="form-group full" style="margin-bottom:18px">
+        <label style="margin-bottom:10px;display:block">Invoice Layout Style</label>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px" id="inv-style-options">
+
+          <div class="inv-style-opt active" data-style="classic" onclick="selectInvStyle('classic',this)">
+            <svg width="60" height="48" viewBox="0 0 60 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="60" height="48" rx="3" fill="currentColor" fill-opacity=".05"/>
+              <rect x="4" y="4" width="20" height="6" rx="1" fill="var(--accent)" fill-opacity=".7"/>
+              <rect x="36" y="4" width="20" height="6" rx="1" fill="currentColor" fill-opacity=".2"/>
+              <rect x="4" y="14" width="52" height="1" fill="currentColor" fill-opacity=".2"/>
+              <rect x="4" y="18" width="30" height="3" rx="1" fill="currentColor" fill-opacity=".3"/>
+              <rect x="4" y="24" width="52" height="2" rx="1" fill="currentColor" fill-opacity=".15"/>
+              <rect x="4" y="29" width="52" height="2" rx="1" fill="currentColor" fill-opacity=".1"/>
+              <rect x="4" y="34" width="52" height="2" rx="1" fill="currentColor" fill-opacity=".1"/>
+              <rect x="36" y="40" width="20" height="4" rx="1" fill="var(--accent)" fill-opacity=".4"/>
+            </svg>
+            Classic
+          </div>
+
+          <div class="inv-style-opt" data-style="modern" onclick="selectInvStyle('modern',this)">
+            <svg width="60" height="48" viewBox="0 0 60 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="60" height="48" rx="3" fill="currentColor" fill-opacity=".05"/>
+              <rect width="60" height="14" rx="3" fill="var(--accent)" fill-opacity=".3"/>
+              <rect x="4" y="3" width="24" height="8" rx="1" fill="white" fill-opacity=".3"/>
+              <rect x="36" y="3" width="20" height="8" rx="1" fill="white" fill-opacity=".2"/>
+              <rect x="4" y="18" width="28" height="3" rx="1" fill="currentColor" fill-opacity=".3"/>
+              <rect x="4" y="24" width="52" height="2" rx="1" fill="currentColor" fill-opacity=".15"/>
+              <rect x="4" y="29" width="52" height="2" rx="1" fill="currentColor" fill-opacity=".1"/>
+              <rect x="4" y="34" width="52" height="2" rx="1" fill="currentColor" fill-opacity=".1"/>
+              <rect x="36" y="40" width="20" height="4" rx="1" fill="var(--accent)" fill-opacity=".5"/>
+            </svg>
+            Modern
+          </div>
+
+          <div class="inv-style-opt" data-style="minimal" onclick="selectInvStyle('minimal',this)">
+            <svg width="60" height="48" viewBox="0 0 60 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="60" height="48" rx="3" fill="currentColor" fill-opacity=".05"/>
+              <rect x="4" y="4" width="10" height="10" rx="2" fill="var(--accent)" fill-opacity=".5"/>
+              <rect x="18" y="5" width="22" height="3" rx="1" fill="currentColor" fill-opacity=".4"/>
+              <rect x="18" y="10" width="15" height="2" rx="1" fill="currentColor" fill-opacity=".2"/>
+              <rect x="4" y="18" width="52" height="1" fill="currentColor" fill-opacity=".3"/>
+              <rect x="4" y="22" width="52" height="2" rx="1" fill="currentColor" fill-opacity=".1"/>
+              <rect x="4" y="27" width="52" height="2" rx="1" fill="currentColor" fill-opacity=".1"/>
+              <rect x="4" y="32" width="52" height="2" rx="1" fill="currentColor" fill-opacity=".1"/>
+              <rect x="40" y="39" width="16" height="5" rx="2" fill="currentColor" fill-opacity=".25"/>
+            </svg>
+            Minimal
+          </div>
+
+          <div class="inv-style-opt" data-style="bold" onclick="selectInvStyle('bold',this)">
+            <svg width="60" height="48" viewBox="0 0 60 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="60" height="48" rx="3" fill="currentColor" fill-opacity=".05"/>
+              <rect width="16" height="48" rx="3" fill="var(--accent)" fill-opacity=".25"/>
+              <rect x="20" y="4" width="36" height="5" rx="1" fill="currentColor" fill-opacity=".4"/>
+              <rect x="20" y="12" width="26" height="3" rx="1" fill="currentColor" fill-opacity=".2"/>
+              <rect x="20" y="20" width="36" height="2" rx="1" fill="currentColor" fill-opacity=".15"/>
+              <rect x="20" y="25" width="36" height="2" rx="1" fill="currentColor" fill-opacity=".1"/>
+              <rect x="20" y="30" width="36" height="2" rx="1" fill="currentColor" fill-opacity=".1"/>
+              <rect x="20" y="38" width="24" height="6" rx="2" fill="var(--accent)" fill-opacity=".4"/>
+            </svg>
+            Bold Sidebar
+          </div>
+        </div>
+      </div>
+
+      <!-- Invoice accent color -->
+      <div class="form-group full" style="margin-bottom:18px">
+        <label style="margin-bottom:10px;display:block">Invoice Accent Color <span style="font-size:10px;color:var(--text3)">(headings, table headers, total highlight)</span></label>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <div style="display:flex;gap:8px;flex-wrap:wrap" id="inv-color-swatches">
+            <div class="color-swatch" data-color="#e03030" style="background:#e03030" onclick="selectInvColor('#e03030',this)" title="Red"></div>
+            <div class="color-swatch" data-color="#1a1a2e" style="background:#1a1a2e;border:1px solid #444" onclick="selectInvColor('#1a1a2e',this)" title="Navy"></div>
+            <div class="color-swatch" data-color="#0ea5e9" style="background:#0ea5e9" onclick="selectInvColor('#0ea5e9',this)" title="Sky Blue"></div>
+            <div class="color-swatch" data-color="#059669" style="background:#059669" onclick="selectInvColor('#059669',this)" title="Emerald"></div>
+            <div class="color-swatch" data-color="#7c3aed" style="background:#7c3aed" onclick="selectInvColor('#7c3aed',this)" title="Purple"></div>
+            <div class="color-swatch" data-color="#d97706" style="background:#d97706" onclick="selectInvColor('#d97706',this)" title="Amber"></div>
+            <div class="color-swatch" data-color="#374151" style="background:#374151" onclick="selectInvColor('#374151',this)" title="Charcoal"></div>
+            <div class="color-swatch" data-color="#111827" style="background:#111827;border:1px solid #444" onclick="selectInvColor('#111827',this)" title="Black"></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="color" id="inv-color-picker" value="#e03030"
+              style="width:36px;height:36px;border:none;border-radius:6px;padding:0;cursor:pointer;background:none"
+              oninput="selectInvColor(this.value,null,true)">
+            <span style="font-size:11px;color:var(--text3)">Custom</span>
+            <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text2)" id="inv-color-label">#e03030</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Invoice font -->
+      <div class="form-group full" style="margin-bottom:18px">
+        <label style="margin-bottom:10px;display:block">Invoice Font</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap" id="inv-font-options">
+          <div class="font-option active" data-font="Helvetica Neue" onclick="selectInvFont('Helvetica Neue',this)">Helvetica Neue</div>
+          <div class="font-option" data-font="Arial" onclick="selectInvFont('Arial',this)">Arial</div>
+          <div class="font-option" data-font="Georgia" onclick="selectInvFont('Georgia',this)" style="font-family:Georgia">Georgia</div>
+          <div class="font-option" data-font="Playfair Display" onclick="selectInvFont('Playfair Display',this)" style="font-family:'Playfair Display'">Playfair Display</div>
+          <div class="font-option" data-font="Poppins" onclick="selectInvFont('Poppins',this)" style="font-family:'Poppins'">Poppins</div>
+          <div class="font-option" data-font="Inter" onclick="selectInvFont('Inter',this)" style="font-family:'Inter'">Inter</div>
+          <div class="font-option" data-font="Raleway" onclick="selectInvFont('Raleway',this)" style="font-family:'Raleway'">Raleway</div>
+        </div>
+      </div>
+
+      <!-- Invoice live preview -->
+      <div style="background:#fff;border-radius:8px;padding:20px;font-size:12px;color:#222;overflow:hidden">
+        <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px">Invoice Preview</div>
+        <div id="inv-design-preview" style="border:1px solid #e5e5e5;border-radius:6px;overflow:hidden">
+          <div id="inv-prev-header" style="background:#e03030;color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center">
+            <div style="font-weight:700;font-size:14px" id="inv-prev-company">Your Company</div>
+            <div style="font-size:11px;opacity:.85">INVOICE #202600001</div>
+          </div>
+          <div style="padding:14px 16px;background:#fff">
+            <div style="display:flex;justify-content:space-between;margin-bottom:10px">
+              <div style="font-size:11px;color:#555">Bill To: <strong>Client Name</strong></div>
+              <div style="font-size:11px;color:#555">Date: 2026-04-29</div>
+            </div>
+            <table style="width:100%;border-collapse:collapse;font-size:11px">
+              <thead><tr id="inv-prev-thead">
+                <th style="padding:6px 8px;text-align:left;background:#e03030;color:#fff">ITEM</th>
+                <th style="padding:6px 8px;text-align:right;background:#e03030;color:#fff">AMOUNT</th>
+              </tr></thead>
+              <tbody>
+                <tr><td style="padding:5px 8px;border-bottom:1px solid #f0f0f0">Service Item</td><td style="padding:5px 8px;text-align:right;border-bottom:1px solid #f0f0f0">R1,500.00</td></tr>
+                <tr><td style="padding:5px 8px;font-weight:600">Total</td><td style="padding:5px 8px;text-align:right;font-weight:700;color:#e03030" id="inv-prev-total">R1,500.00</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <div class="settings-section" id="settings-account-section">
     <div class="settings-header">Account & Security</div>
     <div class="settings-body">
@@ -2317,6 +2567,7 @@ function showApp() {
   const _sess = getSession();
   const _co = _s.company ? _s.company.split('(')[0].trim() : (_sess?.tenantName||'Invoice CRM');
   document.title = _co + ' — CRM';
+  applyTheme(_s);
   updateSidebarBranding();  // re-run after load() so tenant's own settings are used
   applyRoleRestrictions();
   renderDashboard();
@@ -2672,6 +2923,8 @@ function loadSettings(){
   // Update account section role label for tenants
   const roleLabel = document.getElementById('settings-role-label');
   if(roleLabel) roleLabel.textContent = isTenant ? 'Portal Admin' : (ROLES[sess?.role]?.label || 'Admin');
+  // Load theme controls (must come after settings loaded)
+  loadThemeControls();
   const setV=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v||''};
   setV('set-company',s.company);setV('set-tagline',s.tagline);setV('set-owner',s.owner);
   setV('set-phone',s.phone);setV('set-email',s.email);setV('set-website',s.website);setV('set-address',s.address);
@@ -2694,13 +2947,263 @@ function saveSettings(){
     fyStart:parseInt(gv('set-fy-start'))||3,
     bkEmail:gv('set-bk-email'),
     defaultRefundPolicy:gv('set-refund-policy'),
-    defaultClientObligations:gv('set-client-obligations')
+    defaultClientObligations:gv('set-client-obligations'),
+    // Theme fields are saved live by the control functions, just persist them here
+    themeAccent:      state.settings.themeAccent,
+    themeBg:          state.settings.themeBg,
+    themeBodyFont:    state.settings.themeBodyFont,
+    themeHeadingFont: state.settings.themeHeadingFont,
+    themeRadius:      state.settings.themeRadius,
+    invStyle:         state.settings.invStyle,
+    invAccentColor:   state.settings.invAccentColor,
+    invFont:          state.settings.invFont,
   };
   save();
   updateSidebarBranding();
   updatePreview();
-  toast('Settings saved ✓','success');
+  applyTheme();
+  toast('Settings saved ✓', 'success');
 }
+// ============================================================
+//  THEME ENGINE
+// ============================================================
+
+const BG_THEMES = {
+  dark:      { bg:'#0a0a0f', surface:'#13131a', surface2:'#1c1c27', surface3:'#252535', border:'#2a2a3d', text:'#f0f0f5', text2:'#9090a8', text3:'#5a5a72' },
+  midnight:  { bg:'#020818', surface:'#0d1b3e', surface2:'#132347', surface3:'#1a2e5a', border:'#1e3460', text:'#e8f0fe', text2:'#8ba3cc', text3:'#4a6a99' },
+  forest:    { bg:'#071008', surface:'#0e1e10', surface2:'#152818', surface3:'#1c3320', border:'#243d26', text:'#e8f5e9', text2:'#88b08a', text3:'#4a6e4d' },
+  slate:     { bg:'#0a0e14', surface:'#141b25', surface2:'#1c2635', surface3:'#243142', border:'#2c3d52', text:'#e8edf5', text2:'#8898aa', text3:'#4a5e72' },
+  charcoal:  { bg:'#0f0f0f', surface:'#1a1a1a', surface2:'#242424', surface3:'#2e2e2e', border:'#383838', text:'#f0f0f0', text2:'#909090', text3:'#5a5a5a' },
+};
+
+function applyTheme(settings) {
+  const s = settings || state.settings;
+  const root = document.documentElement;
+
+  // Accent color
+  if (s.themeAccent) {
+    root.style.setProperty('--accent', s.themeAccent);
+    root.style.setProperty('--accentglow', hexToRgba(s.themeAccent, 0.15));
+    root.style.setProperty('--theme-accent', s.themeAccent);
+    // Login button color
+    const loginBtn = document.querySelector('.login-btn');
+    if (loginBtn) loginBtn.style.background = s.themeAccent;
+  }
+
+  // Background theme
+  const bgKey = s.themeBg || 'dark';
+  const bg = BG_THEMES[bgKey] || BG_THEMES.dark;
+  Object.entries(bg).forEach(([k, v]) => root.style.setProperty(`--${k.replace(/([A-Z])/g,'_$1').toLowerCase()}`, v));
+  // Also remap surface3 to correct var name
+  root.style.setProperty('--bg', bg.bg);
+  root.style.setProperty('--surface', bg.surface);
+  root.style.setProperty('--surface2', bg.surface2);
+  root.style.setProperty('--surface3', bg.surface3);
+  root.style.setProperty('--border', bg.border);
+  root.style.setProperty('--text', bg.text);
+  root.style.setProperty('--text2', bg.text2);
+  root.style.setProperty('--text3', bg.text3);
+
+  // Body font
+  if (s.themeBodyFont) {
+    root.style.setProperty('--theme-font', `'${s.themeBodyFont}',sans-serif`);
+    document.body.style.fontFamily = `'${s.themeBodyFont}',sans-serif`;
+  }
+
+  // Heading font
+  if (s.themeHeadingFont) {
+    root.style.setProperty('--theme-heading-font', `'${s.themeHeadingFont}',sans-serif`);
+    document.querySelectorAll('.name, .card-title, .modal-title, .logo-text .name, [class*="heading"]').forEach(el => {
+      el.style.fontFamily = `'${s.themeHeadingFont}',sans-serif`;
+    });
+  }
+
+  // Border radius
+  if (s.themeRadius !== undefined) {
+    root.style.setProperty('--radius', s.themeRadius + 'px');
+  }
+
+  // Update the sidebar brand color accent
+  const accentEl = document.querySelector('.logo-text .sub');
+  if (accentEl && s.themeAccent) accentEl.style.color = s.themeAccent;
+}
+
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// ── CRM Theme controls
+function selectAccent(color, el, fromPicker) {
+  state.settings.themeAccent = color;
+  // Update swatch UI
+  document.querySelectorAll('#accent-swatches .color-swatch').forEach(s => s.classList.remove('active'));
+  if (el) el.classList.add('active');
+  // Sync picker + label
+  const picker = document.getElementById('accent-custom-picker');
+  const label  = document.getElementById('accent-hex-label');
+  if (picker) picker.value = color;
+  if (label)  label.textContent = color;
+  applyTheme();
+}
+
+function selectBgTheme(key, el) {
+  state.settings.themeBg = key;
+  document.querySelectorAll('#bg-theme-options .font-option').forEach(e => e.classList.remove('active'));
+  if (el) el.classList.add('active');
+  applyTheme();
+}
+
+function selectFont(type, font, el) {
+  if (type === 'body') {
+    state.settings.themeBodyFont = font;
+    document.querySelectorAll('#body-font-options .font-option').forEach(e => e.classList.remove('active'));
+  } else {
+    state.settings.themeHeadingFont = font;
+    document.querySelectorAll('#heading-font-options .font-option').forEach(e => e.classList.remove('active'));
+  }
+  if (el) el.classList.add('active');
+  applyTheme();
+  updateInvDesignPreview();
+}
+
+function selectRadius(val) {
+  state.settings.themeRadius = parseInt(val);
+  const label = document.getElementById('radius-label');
+  if (label) label.textContent = val + 'px';
+  document.documentElement.style.setProperty('--radius', val + 'px');
+}
+
+// ── Invoice design controls
+function selectInvStyle(style, el) {
+  state.settings.invStyle = style;
+  document.querySelectorAll('#inv-style-options .inv-style-opt').forEach(e => e.classList.remove('active'));
+  if (el) el.classList.add('active');
+  updateInvDesignPreview();
+}
+
+function selectInvColor(color, el, fromPicker) {
+  state.settings.invAccentColor = color;
+  document.querySelectorAll('#inv-color-swatches .color-swatch').forEach(s => s.classList.remove('active'));
+  if (el) el.classList.add('active');
+  const picker = document.getElementById('inv-color-picker');
+  const label  = document.getElementById('inv-color-label');
+  if (picker) picker.value = color;
+  if (label)  label.textContent = color;
+  updateInvDesignPreview();
+}
+
+function selectInvFont(font, el) {
+  state.settings.invFont = font;
+  document.querySelectorAll('#inv-font-options .font-option').forEach(e => e.classList.remove('active'));
+  if (el) el.classList.add('active');
+  updateInvDesignPreview();
+}
+
+function updateInvDesignPreview() {
+  const s = state.settings;
+  const color   = s.invAccentColor || '#e03030';
+  const font    = s.invFont        || 'Helvetica Neue';
+  const style   = s.invStyle       || 'classic';
+  const company = s.company?.split('(')[0].trim() || 'Your Company';
+
+  const preview = document.getElementById('inv-design-preview');
+  if (!preview) return;
+  preview.style.fontFamily = `'${font}',Helvetica,Arial,sans-serif`;
+
+  const header     = document.getElementById('inv-prev-header');
+  const thead      = document.getElementById('inv-prev-thead');
+  const totalEl    = document.getElementById('inv-prev-total');
+  const companyEl  = document.getElementById('inv-prev-company');
+
+  if (companyEl) companyEl.textContent = company;
+
+  // Apply style
+  if (style === 'classic') {
+    if (header) { header.style.cssText = `background:${color};color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center`; }
+    if (thead) [...thead.children].forEach(th => { th.style.background=color; th.style.color='#fff'; });
+    if (totalEl) totalEl.style.color = color;
+  } else if (style === 'modern') {
+    if (header) { header.style.cssText = `background:${color};color:#fff;padding:16px;display:flex;justify-content:space-between;align-items:center;font-weight:700`; }
+    if (thead) [...thead.children].forEach(th => { th.style.background=color+'22'; th.style.color=color; });
+    if (totalEl) totalEl.style.color = color;
+  } else if (style === 'minimal') {
+    if (header) { header.style.cssText = `background:#fff;color:#111;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid ${color}`; }
+    if (thead) [...thead.children].forEach(th => { th.style.background='#f9f9f9'; th.style.color='#333'; th.style.borderBottom=`2px solid ${color}`; });
+    if (totalEl) totalEl.style.color = color;
+  } else if (style === 'bold') {
+    if (header) { header.style.cssText = `background:#fff;color:#111;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;border-left:6px solid ${color}`; }
+    if (thead) [...thead.children].forEach(th => { th.style.background=color; th.style.color='#fff'; });
+    if (totalEl) totalEl.style.color = color;
+  }
+}
+
+// ── Load theme settings into the UI controls
+function loadThemeControls() {
+  const s = state.settings;
+
+  // Accent color
+  const accent = s.themeAccent || '#ff3c3c';
+  const picker = document.getElementById('accent-custom-picker');
+  const label  = document.getElementById('accent-hex-label');
+  if (picker) picker.value = accent;
+  if (label)  label.textContent = accent;
+  document.querySelectorAll('#accent-swatches .color-swatch').forEach(sw => {
+    sw.classList.toggle('active', sw.dataset.color === accent);
+  });
+
+  // Background theme
+  const bgKey = s.themeBg || 'dark';
+  document.querySelectorAll('#bg-theme-options .font-option').forEach(el => {
+    el.classList.toggle('active', el.dataset.bg === bgKey);
+  });
+
+  // Body font
+  const bodyFont = s.themeBodyFont || 'DM Sans';
+  document.querySelectorAll('#body-font-options .font-option').forEach(el => {
+    el.classList.toggle('active', el.dataset.font === bodyFont);
+  });
+
+  // Heading font
+  const headFont = s.themeHeadingFont || 'Syne';
+  document.querySelectorAll('#heading-font-options .font-option').forEach(el => {
+    el.classList.toggle('active', el.dataset.font === headFont);
+  });
+
+  // Radius
+  const radius = s.themeRadius !== undefined ? s.themeRadius : 10;
+  const slider = document.getElementById('radius-slider');
+  const rLabel = document.getElementById('radius-label');
+  if (slider) slider.value = radius;
+  if (rLabel) rLabel.textContent = radius + 'px';
+
+  // Invoice style
+  const invStyle = s.invStyle || 'classic';
+  document.querySelectorAll('#inv-style-options .inv-style-opt').forEach(el => {
+    el.classList.toggle('active', el.dataset.style === invStyle);
+  });
+
+  // Invoice color
+  const invColor = s.invAccentColor || '#e03030';
+  const invPicker = document.getElementById('inv-color-picker');
+  const invLabel  = document.getElementById('inv-color-label');
+  if (invPicker) invPicker.value = invColor;
+  if (invLabel)  invLabel.textContent = invColor;
+  document.querySelectorAll('#inv-color-swatches .color-swatch').forEach(sw => {
+    sw.classList.toggle('active', sw.dataset.color === invColor);
+  });
+
+  // Invoice font
+  const invFont = s.invFont || 'Helvetica Neue';
+  document.querySelectorAll('#inv-font-options .font-option').forEach(el => {
+    el.classList.toggle('active', el.dataset.font === invFont);
+  });
+
+  updateInvDesignPreview();
+}
+
 function updateSidebarBranding(){
   const s = state.settings;
   const sess = getSession();
@@ -3219,19 +3722,40 @@ function buildInvoiceHTML(inv,s){
   const items=(inv.items||[]);
   const subtotal=parseFloat(inv.subtotal||inv.total||0);
   const total=parseFloat(inv.total||0);
+  // Invoice design customization
+  const invColor = s.invAccentColor || '#e03030';
+  const invFont  = s.invFont        || 'Helvetica Neue, Arial, sans-serif';
+  const invStyle = s.invStyle       || 'classic';
+  // Style-based header and table header styles
+  let headerBg, headerColor, headerPad, tableHeaderBg, tableHeaderColor, leftAccent='';
+  if(invStyle==='modern'){
+    headerBg=invColor; headerColor='#fff'; headerPad='20px 24px';
+    tableHeaderBg=invColor+'22'; tableHeaderColor=invColor;
+  } else if(invStyle==='minimal'){
+    headerBg='#fff'; headerColor='#111'; headerPad='16px 24px';
+    tableHeaderBg='#f9f9f9'; tableHeaderColor='#333';
+    leftAccent=`border-bottom:3px solid ${invColor}`;
+  } else if(invStyle==='bold'){
+    headerBg='#fff'; headerColor='#111'; headerPad='16px 24px';
+    tableHeaderBg=invColor; tableHeaderColor='#fff';
+    leftAccent=`border-left:6px solid ${invColor}`;
+  } else { // classic (default)
+    headerBg=invColor; headerColor='#fff'; headerPad='16px 24px';
+    tableHeaderBg=invColor; tableHeaderColor='#fff';
+  }
   const itemRows=items.map(i=>{
     const parts=i.desc.split('|');const main=parts[0].trim();const sub=parts[1]?parts[1].trim():'';
     return`<tr>
       <td style="padding:12px 10px;border-bottom:1px solid #f0f0f0;vertical-align:top">
         <div style="font-weight:600;color:#111">${main}</div>
-        ${sub?`<div style="font-size:10px;color:#e05c00;margin-top:2px">${sub}</div>`:''}
+        ${sub?`<div style="font-size:10px;color:${invColor};margin-top:2px">${sub}</div>`:''}
       </td>
       <td style="padding:12px 10px;border-bottom:1px solid #f0f0f0;text-align:right">${i.price?fmtR(i.price):''}</td>
       <td style="padding:12px 10px;border-bottom:1px solid #f0f0f0;text-align:right">${i.qty||''}</td>
       <td style="padding:12px 10px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600">${i.amount?fmtR(i.amount):''}</td>
     </tr>`;}).join('');
   return`
-  <div style="max-width:800px;margin:0 auto">
+  <div style="max-width:800px;margin:0 auto;font-family:'${invFont}',Helvetica,Arial,sans-serif;${leftAccent?'border-left:6px solid '+invColor+';padding-left:20px':''}">
     <!-- HEADER -->
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px">
       <div>
@@ -3265,11 +3789,11 @@ function buildInvoiceHTML(inv,s){
     <!-- ITEMS TABLE -->
     <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:0">
       <thead>
-        <tr style="border-bottom:1px solid #bbb">
-          <th style="text-align:left;padding:9px 10px;font-size:9px;text-transform:uppercase;letter-spacing:.9px;color:#666;font-weight:700;width:55%">Item</th>
-          <th style="text-align:right;padding:9px 10px;font-size:9px;text-transform:uppercase;letter-spacing:.9px;color:#666;font-weight:700;width:16%">Price</th>
-          <th style="text-align:right;padding:9px 10px;font-size:9px;text-transform:uppercase;letter-spacing:.9px;color:#666;font-weight:700;width:10%">Days</th>
-          <th style="text-align:right;padding:9px 10px;font-size:9px;text-transform:uppercase;letter-spacing:.9px;color:#666;font-weight:700;width:19%">Amount</th>
+        <tr style="background:${tableHeaderBg}">
+          <th style="text-align:left;padding:9px 10px;font-size:9px;text-transform:uppercase;letter-spacing:.9px;color:${tableHeaderColor};font-weight:700;width:55%">Item</th>
+          <th style="text-align:right;padding:9px 10px;font-size:9px;text-transform:uppercase;letter-spacing:.9px;color:${tableHeaderColor};font-weight:700;width:16%">Price</th>
+          <th style="text-align:right;padding:9px 10px;font-size:9px;text-transform:uppercase;letter-spacing:.9px;color:${tableHeaderColor};font-weight:700;width:10%">Days</th>
+          <th style="text-align:right;padding:9px 10px;font-size:9px;text-transform:uppercase;letter-spacing:.9px;color:${tableHeaderColor};font-weight:700;width:19%">Amount</th>
         </tr>
       </thead>
       <tbody>${itemRows||'<tr><td colspan="4" style="padding:12px 10px;color:#bbb;font-size:10px">No items</td></tr>'}</tbody>
@@ -3277,15 +3801,15 @@ function buildInvoiceHTML(inv,s){
         <tr><td colspan="3" style="padding:8px 10px;text-align:right;color:#555;font-size:11px">Subtotal</td><td style="padding:8px 10px;text-align:right;font-weight:600">${fmtR(subtotal)}</td></tr>
 
         <tr><td colspan="3" style="padding:8px 10px;text-align:right;color:#555;font-size:11px">Total</td><td style="padding:8px 10px;text-align:right;font-weight:600">${fmtR(total)}</td></tr>
-        <tr style="border-top:1px solid #ccc">
-          <td colspan="3" style="padding:14px 10px;font-size:13px;font-weight:800;color:#111"><strong>Amount Due</strong></td>
-          <td style="padding:14px 10px;font-size:14px;font-weight:800;color:#111;text-align:right"><strong>${fmtR(total)}</strong></td>
+        <tr style="border-top:2px solid ${invColor}">
+          <td colspan="3" style="padding:14px 10px;font-size:13px;font-weight:800;color:${invColor}"><strong>Amount Due</strong></td>
+          <td style="padding:14px 10px;font-size:14px;font-weight:800;color:${invColor};text-align:right"><strong>${fmtR(total)}</strong></td>
         </tr>
       </tfoot>
     </table>
     <!-- PAYMENT INSTRUCTIONS -->
     <div style="margin-top:22px">
-      <div style="font-size:11px;font-weight:700;color:#111;margin-bottom:8px">Payment Instruction</div>
+      <div style="font-size:11px;font-weight:700;color:${invColor};margin-bottom:8px;text-transform:uppercase;letter-spacing:.8px">Payment Instruction</div>
       <div style="font-size:11px;color:#444;line-height:1.75">
         Bank: ${s.bank||'FNB/RMB'}<br>
         Account Holder: ${s.accHolder||'Sofireit Support'}<br>
@@ -4808,6 +5332,7 @@ if(state.invoices.length===0&&state.customers.length===0&&state.expenses.length=
   seedPayments.forEach(p=>state.payments.push(p));
   save();
 }
+applyTheme();
 updateSidebarBranding();
 updatePreview();
 renderDashboard();
