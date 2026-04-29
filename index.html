@@ -307,10 +307,13 @@ textarea{resize:vertical;min-height:70px}
     <div class="nav-item" data-page="expenses"><span class="nav-icon">◐</span> Expenses</div>
     <div class="nav-item" data-page="customers"><span class="nav-icon">◑</span> Customers</div>
     <div class="nav-item" data-page="settings"><span class="nav-icon">⚙</span> Settings</div>
+    <div class="nav-item" data-page="controlpanel" id="nav-controlpanel" style="display:none"><span class="nav-icon">👑</span> Control Panel</div>
   </nav>
   <div class="sidebar-bottom" id="sidebar-contact" style="padding-bottom:8px">
-    <div id="sidebar-user-name" style="font-weight:500;color:var(--text2);margin-bottom:2px">Juan Du Plessis</div>
-    <div id="sidebar-user-email" style="margin-bottom:10px">juan@sofire-it.co.za</div>
+    <div id="sidebar-user-name" style="font-weight:500;color:var(--text2);margin-bottom:1px">Juan Du Plessis</div>
+    <div id="sidebar-user-email" style="margin-bottom:6px;font-size:11px">juan@sofire-it.co.za</div>
+    <div id="sidebar-role-badge" style="display:none;font-size:10px;color:var(--yellow);font-family:'DM Mono',monospace;margin-bottom:8px;letter-spacing:.5px"></div>
+    <button id="btn-return-admin" onclick="returnToAdmin()" class="btn btn-ghost btn-sm" style="display:none;width:100%;justify-content:center;color:var(--yellow);margin-bottom:6px">← Return to Admin</button>
     <button onclick="doLogout()" class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;color:var(--accent)">⎋ Sign Out</button>
   </div>
 </aside>
@@ -874,6 +877,64 @@ textarea{resize:vertical;min-height:70px}
 </div>
 
 <!-- ===================== SETTINGS ===================== -->
+<!-- ===================== CONTROL PANEL ===================== -->
+<div class="content page" id="page-controlpanel">
+
+  <!-- Tenant switcher bar (for super admin switching between tenants) -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+    <div style="font-size:13px;color:var(--text2)">Manage users, roles, and client tenants from here.</div>
+    <div style="display:flex;gap:9px">
+      <button class="btn btn-ghost btn-sm" onclick="renderControlPanel()">↺ Refresh</button>
+      <button class="btn btn-primary" onclick="openNewTenantModal()">＋ Add Client Tenant</button>
+    </div>
+  </div>
+
+  <!-- Portal Users -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-header">
+      <span class="card-title">Portal Users — Your CRM</span>
+      <button class="btn btn-ghost btn-sm" onclick="openNewUserModal()">＋ Add User</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Last Login</th><th>Actions</th></tr></thead>
+        <tbody id="cp-users-tbody"><tr><td colspan="7" style="padding:20px;text-align:center;color:var(--text3)">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Role legend -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-header"><span class="card-title">Role Permissions</span></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0">
+      <div style="padding:16px 18px;border-right:1px solid var(--border)">
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;margin-bottom:8px;color:var(--accent)">👑 Super Admin</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.8">Full access to everything<br>Manage users &amp; tenants<br>Access Control Panel<br>Edit all data<br>Export &amp; backup</div>
+      </div>
+      <div style="padding:16px 18px;border-right:1px solid var(--border)">
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;margin-bottom:8px;color:var(--yellow)">✏ Admin</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.8">Full CRM access<br>Create &amp; edit all records<br>No Control Panel access<br>Cannot manage users<br>Can export data</div>
+      </div>
+      <div style="padding:16px 18px">
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;margin-bottom:8px;color:var(--blue)">👁 Viewer</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.8">Read-only access<br>View invoices, expenses, reports<br>Cannot create or edit<br>Cannot delete anything<br>No settings access</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Client Tenants -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Client Tenants — Rented CRM Portals</span>
+      <button class="btn btn-primary btn-sm" onclick="openNewTenantModal()">＋ Add Client</button>
+    </div>
+    <div id="cp-tenants-grid" style="padding:16px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+      <div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--text3);font-size:13px">No client tenants yet. Add your first client to rent them a CRM portal.</div>
+    </div>
+  </div>
+
+</div>
+
 <div class="content page" id="page-settings">
   <div class="settings-section">
     <div class="settings-header">Company Branding</div>
@@ -1377,6 +1438,105 @@ textarea{resize:vertical;min-height:70px}
   </div>
 </div>
 
+<!-- New User Modal -->
+<div class="modal-overlay" id="new-user-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="new-user-modal-title">Add Portal User</div>
+      <button class="modal-close" onclick="closeModal('new-user-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label>Full Name *</label><input type="text" id="nu-name" placeholder="e.g. Finance Manager"></div>
+        <div class="form-group"><label>Username *</label><input type="text" id="nu-username" placeholder="e.g. finance" autocomplete="off"></div>
+        <div class="form-group full"><label>Email</label><input type="email" id="nu-email" placeholder="finance@sofire-it.co.za"></div>
+        <div class="form-group"><label>Role</label>
+          <select id="nu-role">
+            <option value="superadmin">👑 Super Admin</option>
+            <option value="admin">✏ Admin</option>
+            <option value="viewer" selected>👁 Viewer (read-only)</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Password *</label><input type="password" id="nu-password" placeholder="Min 8 characters" autocomplete="new-password"></div>
+        <div class="form-group full"><label>Confirm Password *</label><input type="password" id="nu-password2" placeholder="Repeat password" autocomplete="new-password"></div>
+      </div>
+      <div id="nu-error" style="display:none;margin-top:10px;padding:10px 13px;background:rgba(255,60,60,.1);border:1px solid rgba(255,60,60,.3);border-radius:7px;font-size:12px;color:var(--accent)"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('new-user-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveNewUser()">Save User</button>
+    </div>
+  </div>
+</div>
+
+<!-- New Tenant Modal -->
+<div class="modal-overlay" id="new-tenant-modal">
+  <div class="modal modal-wide">
+    <div class="modal-header">
+      <div class="modal-title" id="new-tenant-modal-title">Add Client Tenant</div>
+      <button class="modal-close" onclick="closeModal('new-tenant-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--text2);margin-bottom:16px;line-height:1.7">
+        Each tenant gets their own completely isolated CRM — separate data, separate login, same features. Share the login URL with your client. They pay you a monthly retainer to use it.
+      </p>
+      <div class="form-grid">
+        <div class="form-group"><label>Business Name *</label><input type="text" id="nt-company" placeholder="e.g. ABC Company (Pty) Ltd"></div>
+        <div class="form-group"><label>Contact Person *</label><input type="text" id="nt-contact" placeholder="e.g. John Smith"></div>
+        <div class="form-group"><label>Contact Email *</label><input type="email" id="nt-email" placeholder="john@abccompany.co.za"></div>
+        <div class="form-group"><label>Contact Phone</label><input type="text" id="nt-phone" placeholder="+27 12 345 6789"></div>
+        <div class="form-group"><label>Admin Username *</label><input type="text" id="nt-username" placeholder="e.g. abcadmin" autocomplete="off"></div>
+        <div class="form-group"><label>Admin Password *</label><input type="password" id="nt-password" placeholder="Min 8 characters" autocomplete="new-password"></div>
+        <div class="form-group"><label>Monthly Retainer (R)</label><input type="number" id="nt-retainer" placeholder="500.00" step="0.01"></div>
+        <div class="form-group"><label>Status</label>
+          <select id="nt-status">
+            <option value="active">Active</option>
+            <option value="trial">Trial</option>
+            <option value="suspended">Suspended</option>
+          </select>
+        </div>
+        <div class="form-group full"><label>Notes</label><textarea id="nt-notes" style="min-height:55px" placeholder="Any notes about this client..."></textarea></div>
+      </div>
+      <div id="nt-error" style="display:none;margin-top:10px;padding:10px 13px;background:rgba(255,60,60,.1);border:1px solid rgba(255,60,60,.3);border-radius:7px;font-size:12px;color:var(--accent)"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('new-tenant-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveNewTenant()">Create Tenant Portal</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tenant Login Link Modal -->
+<div class="modal-overlay" id="tenant-link-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Client Portal Created ✓</div>
+      <button class="modal-close" onclick="closeModal('tenant-link-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:rgba(45,218,140,.1);border:1px solid rgba(45,218,140,.3);border-radius:8px;padding:14px;margin-bottom:16px;font-size:12px;color:var(--green);line-height:1.7">
+        ✓ Tenant portal created. Share these login details with your client.
+      </div>
+      <div class="form-group" style="margin-bottom:12px">
+        <label>Login URL (share this with your client)</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="tl-url" readonly style="flex:1;font-family:'DM Mono',monospace;font-size:11px;background:var(--surface3)">
+          <button class="btn btn-primary btn-sm" onclick="copyTenantLink()">Copy</button>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label>Username</label><input type="text" id="tl-username" readonly style="background:var(--surface3)"></div>
+        <div class="form-group"><label>Password</label><input type="text" id="tl-password" readonly style="background:var(--surface3)"></div>
+      </div>
+      <p style="font-size:11px;color:var(--text3);margin-top:12px;line-height:1.6">⚠ Ask your client to change their password after first login. The password shown here is only visible now.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('tenant-link-modal')">Close</button>
+      <button class="btn btn-blue" onclick="emailTenantDetails()">📧 Email Details to Client</button>
+    </div>
+  </div>
+</div>
+
 <!-- Tax Payment Modal -->
 <div class="modal-overlay" id="tax-payment-modal">
   <div class="modal">
@@ -1438,6 +1598,410 @@ textarea{resize:vertical;min-height:70px}
 
 <script>
 // ============================================================
+//  MULTI-USER & MULTI-TENANT SYSTEM
+// ============================================================
+
+// Keys:
+//   sofire_users              — array of all portal users for your CRM
+//   sofire_tenants            — array of all client tenants
+//   sofire_crm2               — YOUR data (super admin namespace)
+//   sofire_crm2_tenant_{id}   — each tenant's isolated data
+//   sofire_session            — current session (includes tenantId if tenant login)
+
+const ROLES = {
+  superadmin: { label: '👑 Super Admin', canEdit: true,  canDelete: true,  canSettings: true,  canControlPanel: true  },
+  admin:      { label: '✏ Admin',        canEdit: true,  canDelete: true,  canSettings: false, canControlPanel: false },
+  viewer:     { label: '👁 Viewer',      canEdit: false, canDelete: false, canSettings: false, canControlPanel: false }
+};
+
+function getUsers() {
+  try { return JSON.parse(localStorage.getItem('sofire_users') || '[]'); } catch { return []; }
+}
+function saveUsers(users) {
+  localStorage.setItem('sofire_users', JSON.stringify(users));
+}
+function getTenants() {
+  try { return JSON.parse(localStorage.getItem('sofire_tenants') || '[]'); } catch { return []; }
+}
+function saveTenants(tenants) {
+  localStorage.setItem('sofire_tenants', JSON.stringify(tenants));
+}
+function getTenantDataKey(tenantId) {
+  return `sofire_crm2_tenant_${tenantId}`;
+}
+function getCurrentRole() {
+  const s = getSession();
+  return s?.role || 'viewer';
+}
+function canEdit()         { return ROLES[getCurrentRole()]?.canEdit         ?? false; }
+function canDelete()       { return ROLES[getCurrentRole()]?.canDelete       ?? false; }
+function canSettings()     { return ROLES[getCurrentRole()]?.canSettings     ?? false; }
+function canControlPanel() { return ROLES[getCurrentRole()]?.canControlPanel ?? false; }
+
+// Apply role-based UI restrictions
+function applyRoleRestrictions() {
+  const role = getCurrentRole();
+  const perm = ROLES[role] || ROLES.viewer;
+
+  // Show/hide control panel nav
+  const cpNav = document.getElementById('nav-controlpanel');
+  if (cpNav) cpNav.style.display = perm.canControlPanel ? '' : 'none';
+
+  // Hide settings nav for non-admins
+  const settingsNav = document.querySelector('[data-page="settings"]');
+  if (settingsNav) settingsNav.style.display = perm.canSettings ? '' : 'none';
+
+  // Disable all ＋ / Edit / Delete buttons for viewers
+  if (!perm.canEdit) {
+    // We apply this live when pages render by checking canEdit() in each render function
+    document.querySelectorAll('.btn-primary, .btn-green').forEach(btn => {
+      if (btn.id !== 'send-smtp-btn' && !btn.classList.contains('login-btn')) {
+        btn.disabled = true;
+        btn.style.opacity = '0.4';
+        btn.style.cursor = 'not-allowed';
+        btn.title = 'Read-only access — you cannot make changes';
+      }
+    });
+  }
+
+  // Show viewer banner
+  if (role === 'viewer') {
+    const existing = document.getElementById('viewer-banner');
+    if (!existing) {
+      const banner = document.createElement('div');
+      banner.id = 'viewer-banner';
+      banner.style.cssText = 'position:fixed;bottom:0;left:230px;right:0;background:rgba(74,158,255,.12);border-top:1px solid rgba(74,158,255,.3);padding:8px 20px;font-size:12px;color:var(--blue);z-index:90;display:flex;align-items:center;gap:8px';
+      banner.innerHTML = '👁 <strong>View-only mode</strong> — You can view all data but cannot make changes. Contact Juan Du Plessis to request edit access.';
+      document.body.appendChild(banner);
+    }
+  }
+
+  // Show tenant banner if logged in as a tenant
+  const sess = getSession();
+  if (sess?.tenantId) {
+    const existing = document.getElementById('tenant-banner');
+    if (!existing) {
+      const banner = document.createElement('div');
+      banner.id = 'tenant-banner';
+      banner.style.cssText = 'position:fixed;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent),var(--accent2));z-index:200';
+      document.body.appendChild(banner);
+    }
+  }
+}
+
+// ── Control Panel
+let editingUserId = null;
+let editingTenantId = null;
+let lastCreatedTenant = null;
+
+function renderControlPanel() {
+  renderCPUsers();
+  renderCPTenants();
+}
+
+function renderCPUsers() {
+  const users = getUsers();
+  const sess = getSession();
+  const tbody = document.getElementById('cp-users-tbody');
+  if (!tbody) return;
+
+  // Always show the built-in super admin first
+  const builtIn = [{
+    id: '__builtin__',
+    name: 'Juan Du Plessis',
+    username: 'juan',
+    email: 'juan@sofire-it.co.za',
+    role: 'superadmin',
+    builtin: true,
+    lastLogin: sess?.username === 'juan' ? new Date().toLocaleDateString('en-ZA') : '—'
+  }];
+
+  const allUsers = [...builtIn, ...users.filter(u => u.username !== 'juan')];
+
+  tbody.innerHTML = allUsers.map(u => {
+    const perm = ROLES[u.role] || ROLES.viewer;
+    const isYou = sess?.username === u.username;
+    const isBuiltin = u.builtin;
+    return `<tr>
+      <td style="font-weight:500">${u.name}${isYou?'<span style="background:var(--surface3);color:var(--text3);font-size:10px;padding:1px 6px;border-radius:4px;margin-left:6px">YOU</span>':''}</td>
+      <td class="mono" style="color:var(--text2)">${u.username}</td>
+      <td style="font-size:12px;color:var(--text2)">${u.email||'—'}</td>
+      <td><span class="badge" style="background:var(--surface3)">${perm.label}</span></td>
+      <td><span class="badge badge-paid">Active</span></td>
+      <td style="font-size:11px;color:var(--text3)">${u.lastLogin||'Never'}</td>
+      <td><div style="display:flex;gap:5px">
+        ${!isBuiltin?`<button class="btn btn-ghost btn-sm" onclick="editUser('${u.id}')">Edit</button>`:''}
+        ${!isBuiltin&&!isYou?`<button class="btn btn-ghost btn-sm" style="color:var(--accent)" onclick="deleteUser('${u.id}')">✕</button>`:''}
+        ${isBuiltin?'<span style="font-size:11px;color:var(--text3)">Built-in</span>':''}
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderCPTenants() {
+  const tenants = getTenants();
+  const grid = document.getElementById('cp-tenants-grid');
+  if (!grid) return;
+
+  if (tenants.length === 0) {
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text3);font-size:13px">
+      No client tenants yet.<br><br>
+      <button class="btn btn-primary" onclick="openNewTenantModal()">＋ Add Your First Client</button>
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = tenants.map(t => {
+    const statusColor = t.status==='active'?'var(--green)':t.status==='trial'?'var(--yellow)':'var(--accent)';
+    const statusBg = t.status==='active'?'rgba(45,218,140,.12)':t.status==='trial'?'rgba(255,194,74,.12)':'rgba(255,60,60,.12)';
+    const dataKey = getTenantDataKey(t.id);
+    let entryCount = 0;
+    try {
+      const td = JSON.parse(localStorage.getItem(dataKey)||'{}');
+      entryCount = (td.invoices||[]).length + (td.expenses||[]).length;
+    } catch{}
+
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;position:relative">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px">
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;margin-bottom:3px">${t.company}</div>
+          <div style="font-size:12px;color:var(--text2)">${t.contact}</div>
+          <div style="font-size:11px;color:var(--text3)">${t.email}</div>
+        </div>
+        <span style="background:${statusBg};color:${statusColor};font-size:10px;padding:2px 8px;border-radius:4px;font-family:'DM Mono',monospace;font-weight:600">${t.status.toUpperCase()}</span>
+      </div>
+      <div style="display:flex;gap:14px;padding:10px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin-bottom:10px">
+        <div style="text-align:center;flex:1">
+          <div style="font-family:'DM Mono',monospace;font-size:15px;font-weight:600">${entryCount}</div>
+          <div style="font-size:10px;color:var(--text3)">Records</div>
+        </div>
+        <div style="text-align:center;flex:1">
+          <div style="font-family:'DM Mono',monospace;font-size:15px;font-weight:600;color:var(--green)">R${(t.retainer||0).toLocaleString()}</div>
+          <div style="font-size:10px;color:var(--text3)">/month</div>
+        </div>
+        <div style="text-align:center;flex:1">
+          <div style="font-family:'DM Mono',monospace;font-size:13px;font-weight:600;color:var(--text2)">${t.username}</div>
+          <div style="font-size:10px;color:var(--text3)">Username</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="showTenantLink('${t.id}')">🔗 Login Link</button>
+        <button class="btn btn-ghost btn-sm" onclick="loginAsTenant('${t.id}')">👁 View Portal</button>
+        <button class="btn btn-ghost btn-sm" onclick="editTenant('${t.id}')">Edit</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--accent)" onclick="deleteTenant('${t.id}')">✕</button>
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-top:8px">Created: ${new Date(t.created||Date.now()).toLocaleDateString('en-ZA')}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── User management
+function openNewUserModal(editId) {
+  editingUserId = editId || null;
+  const u = editId ? getUsers().find(x=>x.id===editId) : null;
+  document.getElementById('new-user-modal-title').textContent = editId ? 'Edit User' : 'Add Portal User';
+  document.getElementById('nu-name').value = u?.name||'';
+  document.getElementById('nu-username').value = u?.username||'';
+  document.getElementById('nu-email').value = u?.email||'';
+  document.getElementById('nu-role').value = u?.role||'viewer';
+  document.getElementById('nu-password').value = '';
+  document.getElementById('nu-password2').value = '';
+  document.getElementById('nu-error').style.display='none';
+  openModal('new-user-modal');
+}
+function editUser(id) { openNewUserModal(id); }
+function deleteUser(id) {
+  if (!confirm('Delete this user? They will no longer be able to log in.')) return;
+  const users = getUsers().filter(u=>u.id!==id);
+  saveUsers(users); renderCPUsers(); toast('User deleted','error');
+}
+async function saveNewUser() {
+  const name = document.getElementById('nu-name').value.trim();
+  const username = document.getElementById('nu-username').value.trim().toLowerCase();
+  const email = document.getElementById('nu-email').value.trim();
+  const role = document.getElementById('nu-role').value;
+  const pw = document.getElementById('nu-password').value;
+  const pw2 = document.getElementById('nu-password2').value;
+  const errEl = document.getElementById('nu-error');
+  const showErr = msg => { errEl.textContent=msg; errEl.style.display='block'; };
+
+  if (!name||!username) return showErr('Name and username are required.');
+  if (username === 'juan') return showErr('"juan" is a reserved username.');
+  if (!editingUserId && (!pw||pw.length<8)) return showErr('Password must be at least 8 characters.');
+  if (pw && pw !== pw2) return showErr('Passwords do not match.');
+
+  const users = getUsers();
+  const exists = users.find(u=>u.username===username && u.id!==editingUserId);
+  if (exists) return showErr('Username already taken. Choose another.');
+
+  const hash = pw ? await sha256(pw) : null;
+  const user = {
+    id: editingUserId || Date.now().toString(),
+    name, username, email, role,
+    passwordHash: hash || (users.find(u=>u.id===editingUserId)?.passwordHash||''),
+    created: editingUserId ? undefined : Date.now()
+  };
+  if (editingUserId) {
+    const idx = users.findIndex(u=>u.id===editingUserId);
+    if (idx>=0) users[idx]={...users[idx],...user};
+  } else {
+    users.push(user);
+  }
+  saveUsers(users);
+  closeModal('new-user-modal');
+  renderCPUsers();
+  toast(editingUserId?'User updated ✓':'User created ✓','success');
+  editingUserId=null;
+}
+
+// ── Tenant management
+function openNewTenantModal(editId) {
+  editingTenantId = editId || null;
+  const t = editId ? getTenants().find(x=>x.id===editId) : null;
+  document.getElementById('new-tenant-modal-title').textContent = editId ? 'Edit Tenant' : 'Add Client Tenant';
+  document.getElementById('nt-company').value = t?.company||'';
+  document.getElementById('nt-contact').value = t?.contact||'';
+  document.getElementById('nt-email').value = t?.email||'';
+  document.getElementById('nt-phone').value = t?.phone||'';
+  document.getElementById('nt-username').value = t?.username||'';
+  document.getElementById('nt-password').value = '';
+  document.getElementById('nt-retainer').value = t?.retainer||'';
+  document.getElementById('nt-status').value = t?.status||'active';
+  document.getElementById('nt-notes').value = t?.notes||'';
+  document.getElementById('nt-error').style.display='none';
+  openModal('new-tenant-modal');
+}
+function editTenant(id) { openNewTenantModal(id); }
+function deleteTenant(id) {
+  const t = getTenants().find(x=>x.id===id);
+  if (!confirm(`Delete tenant "${t?.company}"? This will permanently delete ALL their data.`)) return;
+  localStorage.removeItem(getTenantDataKey(id));
+  saveTenants(getTenants().filter(x=>x.id!==id));
+  renderCPTenants();
+  toast('Tenant deleted','error');
+}
+async function saveNewTenant() {
+  const company  = document.getElementById('nt-company').value.trim();
+  const contact  = document.getElementById('nt-contact').value.trim();
+  const email    = document.getElementById('nt-email').value.trim();
+  const phone    = document.getElementById('nt-phone').value.trim();
+  const username = document.getElementById('nt-username').value.trim().toLowerCase();
+  const pw       = document.getElementById('nt-password').value;
+  const retainer = parseFloat(document.getElementById('nt-retainer').value)||0;
+  const status   = document.getElementById('nt-status').value;
+  const notes    = document.getElementById('nt-notes').value;
+  const errEl    = document.getElementById('nt-error');
+  const showErr  = msg => { errEl.textContent=msg; errEl.style.display='block'; };
+
+  if (!company||!contact||!username) return showErr('Company, contact name and username are required.');
+  if (!editingTenantId && (!pw||pw.length<8)) return showErr('Password must be at least 8 characters.');
+
+  const tenants = getTenants();
+  const exists = tenants.find(t=>t.username===username && t.id!==editingTenantId);
+  if (exists) return showErr('Username already taken by another tenant.');
+
+  const hash = pw ? await sha256(pw) : null;
+  const id = editingTenantId || ('t'+Date.now().toString(36));
+
+  const tenant = {
+    id, company, contact, email, phone, username,
+    passwordHash: hash || (tenants.find(t=>t.id===editingTenantId)?.passwordHash||''),
+    retainer, status, notes,
+    created: editingTenantId ? (tenants.find(t=>t.id===editingTenantId)?.created||Date.now()) : Date.now()
+  };
+
+  if (editingTenantId) {
+    const idx = tenants.findIndex(t=>t.id===editingTenantId);
+    if (idx>=0) tenants[idx]=tenant;
+    saveTenants(tenants);
+    closeModal('new-tenant-modal');
+    renderCPTenants();
+    toast('Tenant updated ✓','success');
+  } else {
+    tenants.push(tenant);
+    saveTenants(tenants);
+    lastCreatedTenant = { ...tenant, plainPassword: pw };
+    closeModal('new-tenant-modal');
+    // Show the link modal
+    const url = `${window.location.origin}${window.location.pathname}?tenant=${id}`;
+    document.getElementById('tl-url').value = url;
+    document.getElementById('tl-username').value = username;
+    document.getElementById('tl-password').value = pw;
+    openModal('tenant-link-modal');
+    renderCPTenants();
+    toast('Tenant portal created ✓','success');
+  }
+  editingTenantId = null;
+}
+function showTenantLink(id) {
+  const t = getTenants().find(x=>x.id===id);
+  if (!t) return;
+  const url = `${window.location.origin}${window.location.pathname}?tenant=${id}`;
+  document.getElementById('tl-url').value = url;
+  document.getElementById('tl-username').value = t.username;
+  document.getElementById('tl-password').value = '(password hidden — set when created)';
+  openModal('tenant-link-modal');
+}
+function copyTenantLink() {
+  navigator.clipboard.writeText(document.getElementById('tl-url').value).then(()=>toast('Link copied ✓','success'));
+}
+function emailTenantDetails() {
+  const t = lastCreatedTenant;
+  const url = document.getElementById('tl-url').value;
+  const s = state.settings;
+  const to = t?.email||'';
+  const subj = encodeURIComponent(`Your ${s.company||'Sofire-IT'} CRM Portal`);
+  const body = encodeURIComponent(
+    `Hi ${t?.contact||'there'},
+
+Your private CRM portal has been set up.
+
+Login URL: ${url}
+Username: ${t?.username}
+Password: ${t?.plainPassword||'(as provided)'}
+
+Please change your password after first login.
+
+Your monthly retainer is R${t?.retainer||0}/month.
+
+Kind regards,
+${s.owner||s.company}
+${s.phone||''}
+${s.email||''}`
+  );
+  window.open(`mailto:${to}?subject=${subj}&body=${body}`);
+  toast('Opened email client','success');
+}
+
+// ── View a tenant's portal as super admin
+function loginAsTenant(tenantId) {
+  const t = getTenants().find(x=>x.id===tenantId);
+  if (!t) return;
+  // Save current session as a "return" token
+  localStorage.setItem('sofire_admin_return', JSON.stringify(getSession()));
+  // Set a tenant session
+  const tenantSession = {
+    username: t.username, name: t.company, email: t.email,
+    role: 'admin', tenantId: t.id, tenantName: t.company, ts: Date.now()
+  };
+  sessionStorage.setItem('sofire_session', JSON.stringify(tenantSession));
+  // Switch to tenant data namespace
+  window.CURRENT_DATA_KEY = getTenantDataKey(tenantId);
+  // Reload
+  window.location.reload();
+}
+
+// ── Return to super admin from tenant view
+function returnToAdmin() {
+  const ret = JSON.parse(localStorage.getItem('sofire_admin_return')||'null');
+  if (!ret) return;
+  sessionStorage.setItem('sofire_session', JSON.stringify(ret));
+  localStorage.removeItem('sofire_admin_return');
+  window.CURRENT_DATA_KEY = 'sofire_crm2';
+  window.location.reload();
+}
+
+// ============================================================
 //  AUTH — SHA-256 hashed credentials, never plaintext
 // ============================================================
 
@@ -1494,16 +2058,45 @@ async function doLogin() {
   errEl.classList.remove('show');
   if (!username || !password) { errEl.classList.add('show'); return; }
   const hash = await sha256(password);
-  // Check against stored credentials (also check custom credentials in localStorage)
+
+  // ── 1. Check super admin (built-in or custom credentials)
   const stored = JSON.parse(localStorage.getItem('sofire_credentials') || 'null');
-  const creds = stored || ADMIN_USER;
-  if (username === creds.username && hash === creds.passwordHash) {
-    setSession(creds, true); // remember by default
-    showApp();
-  } else {
-    errEl.classList.add('show');
-    document.getElementById('login-password').value = '';
+  const adminCreds = stored || ADMIN_USER;
+  if (username === adminCreds.username && hash === adminCreds.passwordHash) {
+    window.CURRENT_DATA_KEY = 'sofire_crm2';
+    setSession({ ...adminCreds, role: 'superadmin' }, true);
+    load(); showApp(); return;
   }
+
+  // ── 2. Check internal portal users (Finance, Manager etc.)
+  const users = getUsers();
+  const internalUser = users.find(u => u.username === username && u.passwordHash === hash);
+  if (internalUser) {
+    window.CURRENT_DATA_KEY = 'sofire_crm2'; // internal users see your data
+    setSession({ username: internalUser.username, name: internalUser.name,
+      email: internalUser.email, role: internalUser.role }, true);
+    load(); showApp(); return;
+  }
+
+  // ── 3. Check client tenant logins
+  const tenants = getTenants();
+  const tenant = tenants.find(t => t.username === username && t.passwordHash === hash);
+  if (tenant) {
+    if (tenant.status === 'suspended') {
+      errEl.textContent = 'Your portal has been suspended. Please contact Sofire-IT Support.';
+      errEl.classList.add('show'); return;
+    }
+    window.CURRENT_DATA_KEY = getTenantDataKey(tenant.id);
+    setSession({ username: tenant.username, name: tenant.company, email: tenant.email,
+      role: 'admin', tenantId: tenant.id, tenantName: tenant.company }, true);
+    load(); showApp(); return;
+  }
+
+  // ── No match
+  errEl.classList.remove('show');
+  errEl.textContent = 'Incorrect username or password. Please try again.';
+  errEl.classList.add('show');
+  document.getElementById('login-password').value = '';
 }
 
 function doLogout() {
@@ -1532,11 +2125,21 @@ function showApp() {
   document.querySelector('.app').style.display = 'flex';
   document.getElementById('share-view').classList.remove('show');
   // Update sidebar with session user
-  const s = getSession();
-  if (s) {
-    document.getElementById('sidebar-user-name').textContent = s.name || s.username;
-    document.getElementById('sidebar-user-email').textContent = s.email || '';
+  const sess = getSession();
+  if (sess) {
+    document.getElementById('sidebar-user-name').textContent = sess.name || sess.username;
+    document.getElementById('sidebar-user-email').textContent = sess.email || '';
+    // Show role badge in sidebar
+    const role = sess.role || 'viewer';
+    const perm = ROLES[role];
+    const roleEl = document.getElementById('sidebar-role-badge');
+    if(roleEl) { roleEl.textContent = perm?.label||role; roleEl.style.display='block'; }
+    // Show "Return to Admin" button if viewing as tenant
+    const retBtn = document.getElementById('btn-return-admin');
+    if(retBtn) retBtn.style.display = localStorage.getItem('sofire_admin_return') ? 'flex' : 'none';
   }
+  applyRoleRestrictions();
+  renderDashboard();
 }
 
 // ============================================================
@@ -1758,10 +2361,11 @@ let charts = {};
 // ============================================================
 //  PERSISTENCE
 // ============================================================
-function save(){try{localStorage.setItem('sofire_crm2',JSON.stringify(state));}catch(e){}}
+function getDataKey(){ return window.CURRENT_DATA_KEY || 'sofire_crm2'; }
+function save(){try{localStorage.setItem(getDataKey(),JSON.stringify(state));}catch(e){}}
 function load(){
   try{
-    const d=localStorage.getItem('sofire_crm2');
+    const d=localStorage.getItem(getDataKey());
     if(d){const p=JSON.parse(d);state={...state,...p};state.settings={...state.settings,...(p.settings||{})};}}
   catch(e){}
 }
@@ -1838,6 +2442,7 @@ function nav(page){
   }
   if(page==='customers')renderCustomers();
   if(page==='settings')loadSettings();
+  if(page==='controlpanel'){if(canControlPanel())renderControlPanel();else{nav('dashboard');toast('Access denied','error');}}
   if(page==='create'&&!state.editingId)initCreate();
 }
 document.querySelectorAll('.nav-item').forEach(item=>item.addEventListener('click',()=>nav(item.dataset.page)));
@@ -3865,7 +4470,7 @@ function deleteTaxPayment(id) {
 // ============================================================
 //  INIT — auth gate + share URL handling
 // ============================================================
-load();
+// NOTE: load() is called after CURRENT_DATA_KEY is set below
 
 // Handle change password from settings page
 async function handleChangePassword() {
@@ -3882,22 +4487,49 @@ async function handleChangePassword() {
 
 // Check if this is a share link
 const urlParams = new URLSearchParams(window.location.search);
-const shareType = urlParams.get('share');
-const shareData = urlParams.get('data');
+const shareType  = urlParams.get('share');
+const shareData  = urlParams.get('data');
+const tenantParam = urlParams.get('tenant'); // direct tenant login link
+
+// Set CURRENT_DATA_KEY from session BEFORE calling load()
+// so tenants load their own data, not the admin's
+(function initDataKey(){
+  const sess = getSession();
+  if (sess?.tenantId) {
+    window.CURRENT_DATA_KEY = getTenantDataKey(sess.tenantId);
+  } else if (localStorage.getItem('sofire_admin_return')) {
+    // Admin is viewing a tenant — key was set before reload
+    // keep whatever was set
+  } else {
+    window.CURRENT_DATA_KEY = 'sofire_crm2';
+  }
+})();
+
+// Re-load state with correct key
+load();
 
 if (shareType && shareData) {
-  // Share view — self-contained, no login needed
   showShareView(shareType, shareData);
+} else if (tenantParam) {
+  // Pre-fill login username hint for a tenant link
+  showLogin();
+  const t = getTenants().find(x=>x.id===tenantParam);
+  if(t) {
+    document.getElementById('login-username').value = t.username;
+    document.getElementById('login-password').focus();
+    // Update login branding to tenant company if they have settings
+    const td = JSON.parse(localStorage.getItem(getTenantDataKey(t.id))||'{}');
+    if(td.settings?.company) document.getElementById('login-company-name').textContent = td.settings.company.split('(')[0].trim();
+    if(td.settings?.logoData) { document.getElementById('login-logo-emoji').style.display='none'; const img=document.getElementById('login-logo-img'); img.src=td.settings.logoData; img.style.display='block'; }
+  }
 } else if (isLoggedIn()) {
-  // Already authenticated
   showApp();
 } else {
-  // Show login
   showLogin();
 }
 
-// Seed if fresh
-if(state.invoices.length===0&&state.customers.length===0&&state.expenses.length===0){
+// Seed only for the main admin namespace, not tenant portals
+if(state.invoices.length===0&&state.customers.length===0&&state.expenses.length===0&&(window.CURRENT_DATA_KEY||'sofire_crm2')==='sofire_crm2'){
   // Seed with Laerskool Doringkloof invoice
   state.customers.push({id:'seed-1',name:'Laerskool Doringkloof Primary',phone:'+27 126 671 977',email:'',addr:'https://www.dories.co.za/',notes:''});
   state.invoices.push({id:'seed-inv-1',number:'202603845',date:'2026-03-25',due:'2026-04-25',status:'pending',custName:'Laerskool Doringkloof Primary',custPhone:'+27 126 671 977',custEmail:'',custAddr:'https://www.dories.co.za/',notes:'',items:[{desc:'Website Maintenance | Content Updates, Plugins and Theme Updates',price:1050,qty:1,amount:1050}],subtotal:1050,total:1050,refundPolicy:"Sofire-IT Support (Juan Du Plessis Freelance) operates under a strict no-refund policy. Once services are completed and delivered to the client's satisfaction, no refunds will be issued under any circumstances.",clientObligations:"It is the responsibility of the client to provide clear instructions, feedback, and any necessary materials required for the completion of the services. Failure to do so may result in delays or additional charges, but it does not warrant a refund."});
