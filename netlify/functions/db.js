@@ -269,7 +269,7 @@ exports.handler = async (event) => {
           fy_start: s.settings.fyStart, bk_email: s.settings.bkEmail,
           default_refund_policy: s.settings.defaultRefundPolicy,
           default_client_obligations: s.settings.defaultClientObligations,
-          logo_data: s.settings.logoData,
+          // logo_data omitted from batch — synced separately to avoid size issues
           theme_accent: s.settings.themeAccent, theme_bg: s.settings.themeBg,
           theme_body_font: s.settings.themeBodyFont, theme_heading_font: s.settings.themeHeadingFont,
           theme_radius: s.settings.themeRadius, inv_style: s.settings.invStyle,
@@ -308,7 +308,9 @@ exports.handler = async (event) => {
           invoice_id: p.invoiceId, invoice_number: p.invoiceNumber, customer: p.customer,
           employer: p.employer, salary_type: p.salaryType, paye: p.paye, uif: p.uif,
           amount: p.amount, date: p.date, method: p.method, ref: p.ref, notes: p.notes,
-          proof_name: p.proofName, proof_data: p.proofData,
+          proof_name: p.proofName,
+          // Strip base64 proof images — too large for batch upsert (stored in localStorage only)
+          // proof_data omitted intentionally
         })), { onConflict: 'id' }));
       }
 
@@ -317,7 +319,9 @@ exports.handler = async (event) => {
         ops.push(db.from('expenses').upsert(s.expenses.map(e => ({
           id: e.id, tenant_id: tenantId, date: e.date, amount: e.amount,
           category: e.category, method: e.method, description: e.desc, notes: e.notes,
-          receipt_name: e.receiptName, receipt_data: e.receiptData,
+          receipt_name: e.receiptName,
+          // Strip base64 receipt images — too large for batch upsert
+          // receipt_data omitted intentionally
         })), { onConflict: 'id' }));
       }
 
@@ -342,7 +346,10 @@ exports.handler = async (event) => {
       // Run all upserts in parallel
       const results = await Promise.all(ops);
       const errors  = results.filter(r => r.error).map(r => r.error.message);
-      if (errors.length) return err('Partial save error: ' + errors.join('; '), 500);
+      if (errors.length) {
+        console.error('[sync.push] Errors:', errors);
+        return err('Partial save error: ' + errors.join('; '), 500);
+      }
 
       return cors({ success: true, pushed: {
         invoices: s.invoices?.length || 0, customers: s.customers?.length || 0,
@@ -354,16 +361,52 @@ exports.handler = async (event) => {
   }
 
   // ============================================================
-  // SYNC.DELETE_RECORD — delete a single record by table + id
+  // SYNC.DELETE — delete a single record by table + id
   // ============================================================
   if (action === 'sync.delete') {
     const { table, id } = payload || {};
     const ALLOWED = ['invoices','customers','payments','expenses','tax_payments','email_log'];
     if (!ALLOWED.includes(table)) return err('Invalid table');
+    if (!id) return err('Missing id');
 
     const { error } = await db.from(table).delete().eq('id', id).eq('tenant_id', tenantId);
     if (error) return err('Delete failed: ' + error.message, 500);
+    console.log('[sync.delete]', table, id, 'for tenant', tenantId);
     return cors({ success: true });
+  }
+
+  // ============================================================
+  // SYNC.RECONCILE — delete records in Supabase that are no longer in local state
+  // Call this after migration to clean up orphaned records
+  // ============================================================
+  if (action === 'sync.reconcile') {
+    const { state: s } = payload || {};
+    if (!s) return err('Missing state');
+    try {
+      const tables = ['invoices','customers','payments','expenses','tax_payments'];
+      const stateKeys = {
+        invoices:    (s.invoices    || []).map(r => r.id),
+        customers:   (s.customers   || []).map(r => r.id),
+        payments:    (s.payments    || []).map(r => r.id),
+        expenses:    (s.expenses    || []).map(r => r.id),
+        tax_payments:(s.taxPayments || []).map(r => r.id),
+      };
+      const deleteCounts = {};
+      for (const table of tables) {
+        const { data } = await db.from(table).select('id').eq('tenant_id', tenantId);
+        const dbIds    = (data || []).map(r => r.id);
+        const localIds = new Set(stateKeys[table]);
+        const toDelete = dbIds.filter(id => !localIds.has(id));
+        if (toDelete.length) {
+          await db.from(table).delete().in('id', toDelete).eq('tenant_id', tenantId);
+          deleteCounts[table] = toDelete.length;
+        }
+      }
+      console.log('[sync.reconcile] Deleted orphans:', deleteCounts);
+      return cors({ success: true, deleted: deleteCounts });
+    } catch(e) {
+      return err('Reconcile failed: ' + e.message, 500);
+    }
   }
 
   // ============================================================

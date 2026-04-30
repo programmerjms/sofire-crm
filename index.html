@@ -1520,6 +1520,7 @@ textarea{resize:vertical;min-height:70px}
       <button class="btn btn-ghost" onclick="importData()">⬆ Import Backup</button>
       <button class="btn btn-ghost" style="color:var(--yellow)" onclick="resetAndSeed()">📥 Load FY2026 Spreadsheet Data</button>
       <button class="btn btn-ghost" style="color:var(--blue)" onclick="migrateToSupabase()" id="migrate-btn">☁ Migrate to Supabase</button>
+      <button class="btn btn-ghost" style="color:var(--yellow)" onclick="reconcileSupabase()" id="reconcile-btn" title="Remove deleted records from Supabase that no longer exist locally">🔄 Sync Deletions</button>
     </span>
     <input type="file" id="import-file" accept=".json" style="display:none" onchange="handleImport(this)">
   </div>
@@ -2877,6 +2878,39 @@ async function doLogin() {
   resetBtn();
 }
 
+async function reconcileSupabase() {
+  if (!getDbToken()) {
+    toast('Not connected to Supabase — migrate first', 'error'); return;
+  }
+  const btn = document.getElementById('reconcile-btn');
+  if(btn){ btn.textContent='🔄 Syncing...'; btn.disabled=true; }
+
+  try {
+    // Read directly from localStorage (source of truth)
+    const raw = localStorage.getItem(getDataKey());
+    const localState = raw ? JSON.parse(raw) : state;
+    const result = await dbCall('sync.reconcile', { state: localState });
+    if (result.success) {
+      const d = result.deleted || {};
+      const total = Object.values(d).reduce((a,v)=>a+v, 0);
+      if (total === 0) {
+        toast('✓ Supabase is already in sync — no orphaned records found', 'success');
+      } else {
+        const detail = Object.entries(d).map(([t,n])=>`${n} ${t}`).join(', ');
+        toast(`✓ Cleaned up ${total} deleted records from Supabase (${detail})`, 'success');
+      }
+      if(btn){ btn.textContent='✓ Synced'; btn.style.color='var(--green)'; }
+      setTimeout(()=>{ if(btn){btn.textContent='🔄 Sync Deletions';btn.style.color='var(--yellow)';btn.disabled=false;btn.style.color='';} }, 3000);
+    } else {
+      toast('Reconcile failed: ' + (result.error||'Unknown'), 'error');
+      if(btn){ btn.textContent='🔄 Sync Deletions'; btn.disabled=false; }
+    }
+  } catch(e) {
+    toast('Reconcile error: ' + e.message, 'error');
+    if(btn){ btn.textContent='🔄 Sync Deletions'; btn.disabled=false; }
+  }
+}
+
 function doLogout() {
   if (!confirm('Sign out of Sofire-IT CRM?')) return;
   clearSession();
@@ -3990,7 +4024,13 @@ function renderInvoices(){
       </div></td>
     </tr>`).join(''):'<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">📄</div><div class="empty-text">No invoices found</div></div></td></tr>';
 }
-function deleteInvoice(id){if(!confirm('Delete this invoice?'))return;state.invoices=state.invoices.filter(i=>i.id!==id);save();renderInvoices();toast('Deleted','error');}
+function deleteInvoice(id){
+  if(!confirm('Delete this invoice?'))return;
+  state.invoices=state.invoices.filter(i=>i.id!==id);
+  save();
+  if(getDbToken()) dbCall('sync.delete',{table:'invoices',id}).catch(e=>console.warn('Supabase delete failed:',e));
+  renderInvoices();toast('Deleted','error');
+}
 function markPaid(id){
   const inv=state.invoices.find(i=>i.id===id);if(!inv)return;
   inv.status='paid';
@@ -5346,14 +5386,16 @@ function openPaymentModal(editId){
 function editPayment(id){openPaymentModal(id);}
 function deletePayment(id){
   if(!confirm('Delete this payment record?'))return;
-  // If it was an invoice payment, revert invoice status to pending
   const p=state.payments.find(x=>x.id===id);
   if(p&&p.type!=='salary'&&p.invoiceId){
     const inv=state.invoices.find(i=>i.id===p.invoiceId);
     if(inv&&inv.status==='paid')inv.status='pending';
   }
   state.payments=state.payments.filter(x=>x.id!==id);
-  save();renderPayments();renderDashboard();toast('Payment deleted','error');
+  save();
+  // Delete from Supabase immediately
+  if(getDbToken()) dbCall('sync.delete',{table:'payments',id}).catch(e=>console.warn('Supabase delete failed:',e));
+  renderPayments();renderDashboard();toast('Payment deleted','error');
 }
 function handleFileUpload(input){
   uploadedFile=input.files[0];
@@ -5488,7 +5530,13 @@ function saveExpense(){
   if(expReceiptFileCurrent){const r=new FileReader();r.onload=ev=>{exp.receiptData=ev.target.result;finish();};r.readAsDataURL(expReceiptFileCurrent);}
   else finish();
 }
-function deleteExpense(id){if(!confirm('Delete this expense?'))return;state.expenses=state.expenses.filter(e=>e.id!==id);save();renderExpenses();renderDashboard();toast('Deleted','error');}
+function deleteExpense(id){
+  if(!confirm('Delete this expense?'))return;
+  state.expenses=state.expenses.filter(e=>e.id!==id);
+  save();
+  if(getDbToken()) dbCall('sync.delete',{table:'expenses',id}).catch(e=>console.warn('Supabase delete failed:',e));
+  renderExpenses();renderDashboard();toast('Deleted','error');
+}
 function renderExpenses(){
   const fyYear=parseInt(document.getElementById('tax-year-select').value)||2027;
   const monthFilter=document.getElementById('exp-month-filter').value;
@@ -6383,7 +6431,9 @@ function saveTaxPayment() {
 function deleteTaxPayment(id) {
   if (!confirm('Delete this tax payment record?')) return;
   state.taxPayments = (state.taxPayments || []).filter(x => x.id !== id);
-  save(); renderExpenses(); renderDashboard();
+  save();
+  if(getDbToken()) dbCall('sync.delete',{table:'tax_payments',id}).catch(e=>console.warn('Supabase delete failed:',e));
+  renderExpenses(); renderDashboard();
   toast('Tax payment deleted', 'error');
 }
 
