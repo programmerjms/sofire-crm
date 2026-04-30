@@ -329,6 +329,7 @@ textarea{resize:vertical;min-height:70px}
     <div id="sidebar-user-email" style="margin-bottom:6px;font-size:11px">juan@sofire-it.co.za</div>
     <div id="sidebar-role-badge" style="display:none;font-size:10px;color:var(--yellow);font-family:'DM Mono',monospace;margin-bottom:8px;letter-spacing:.5px"></div>
     <button id="btn-return-admin" onclick="returnToAdmin()" class="btn btn-ghost btn-sm" style="display:none;width:100%;justify-content:center;color:var(--yellow);margin-bottom:6px">← Return to Admin</button>
+    <div id="sync-status-indicator" style="display:none;font-size:10px;text-align:center;padding:4px 0;font-family:'DM Mono',monospace;letter-spacing:.4px"></div>
     <button onclick="doLogout()" class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;color:var(--accent)">⎋ Sign Out</button>
   </div>
 </aside>
@@ -1518,6 +1519,7 @@ textarea{resize:vertical;min-height:70px}
       <button class="btn btn-ghost" onclick="exportData()">⬇ Export All Data</button>
       <button class="btn btn-ghost" onclick="importData()">⬆ Import Backup</button>
       <button class="btn btn-ghost" style="color:var(--yellow)" onclick="resetAndSeed()">📥 Load FY2026 Spreadsheet Data</button>
+      <button class="btn btn-ghost" style="color:var(--blue)" onclick="migrateToSupabase()" id="migrate-btn">☁ Migrate to Supabase</button>
     </span>
     <input type="file" id="import-file" accept=".json" style="display:none" onchange="handleImport(this)">
   </div>
@@ -2537,6 +2539,84 @@ function returnToAdmin() {
 // To generate a new hash: open browser console and run:
 //   crypto.subtle.digest('SHA-256', new TextEncoder().encode('yourpassword'))
 //     .then(b => console.log([...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')))
+// ============================================================
+//  SUPABASE CONFIG
+// ============================================================
+const SUPABASE_URL = 'https://gpslxejjpgchmrzriskv.supabase.co';
+const DB_ENDPOINT  = '/.netlify/functions/db';
+
+// Session token stored in localStorage for cross-tab persistence
+function getDbToken()  { return localStorage.getItem('sofire_db_token') || ''; }
+function setDbToken(t) { if(t) localStorage.setItem('sofire_db_token', t); else localStorage.removeItem('sofire_db_token'); }
+
+async function dbCall(action, payload = {}, token = getDbToken()) {
+  try {
+    const resp = await fetch(DB_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Session-Token': token,
+      },
+      body: JSON.stringify({ action, payload, token }),
+    });
+    return await resp.json();
+  } catch (e) {
+    console.error('dbCall error:', e);
+    return { error: e.message };
+  }
+}
+
+// ── Sync state to Supabase (debounced — waits 1.5s after last change)
+let _syncTimer = null;
+let _syncPending = false;
+function scheduleSyncToSupabase() {
+  _syncPending = true;
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(pushToSupabase, 1500);
+}
+
+async function pushToSupabase() {
+  if (!getDbToken()) return; // not logged in via Supabase yet
+  _syncPending = false;
+  const result = await dbCall('sync.push', { state });
+  if (result.error) {
+    console.warn('Supabase sync failed:', result.error);
+    // Fall back to localStorage — data is safe there
+  }
+}
+
+async function pullFromSupabase() {
+  if (!getDbToken()) return false;
+  const result = await dbCall('sync.pull');
+  if (result.error || !result.state) {
+    console.warn('Supabase pull failed:', result.error);
+    return false;
+  }
+  // Merge pulled state into current state, preserving structure
+  const pulled = result.state;
+  state.invoices    = pulled.invoices    || [];
+  state.customers   = pulled.customers   || [];
+  state.payments    = pulled.payments    || [];
+  state.expenses    = pulled.expenses    || [];
+  state.taxPayments = pulled.taxPayments || [];
+  state.emailLog    = pulled.emailLog    || [];
+  if (pulled.settings && Object.keys(pulled.settings).length) {
+    state.settings = { ...state.settings, ...pulled.settings };
+  }
+  if (pulled.nextInvNum) state.nextInvNum = pulled.nextInvNum;
+  return true;
+}
+
+// ── Show sync status in UI (small indicator)
+function setSyncStatus(status) {
+  const el = document.getElementById('sync-status-indicator');
+  if (!el) return;
+  if (status === 'syncing')  { el.textContent = '⟳ Syncing...'; el.style.color = 'var(--text3)'; el.style.display = 'block'; }
+  if (status === 'saved')    { el.textContent = '✓ Saved';       el.style.color = 'var(--green)';  el.style.display = 'block'; setTimeout(()=>{ if(el) el.style.display='none'; }, 2500); }
+  if (status === 'offline')  { el.textContent = '⚠ Offline — saved locally'; el.style.color = 'var(--yellow)'; el.style.display = 'block'; }
+  if (status === 'hidden')   { el.style.display = 'none'; }
+}
+
 const ADMIN_USER = {
   username: 'juan',
   // SHA-256 of 'Sofire@2024!'
@@ -2606,123 +2686,155 @@ async function doLogin() {
   if (!username || !password) { errEl.classList.add('show'); return; }
   const hash = await sha256(password);
 
-  // ── 1. Check super admin (built-in or custom credentials)
+  const btn = document.querySelector('.login-btn');
+  const origText = btn?.textContent || 'Sign In';
+  if(btn){ btn.textContent = '⏳ Signing in...'; btn.disabled = true; }
+
+  const resetBtn = () => { if(btn){ btn.textContent = origText; btn.disabled = false; } };
+
+  // ── 1. Try Supabase auth first (works across all devices/browsers)
+  try {
+    const result = await dbCall('auth.login', { username, passwordHash: hash }, '');
+    if (result.success && result.token) {
+      setDbToken(result.token);
+      const t = result.tenant;
+      const isAdmin = t.id === 'admin';
+      window.CURRENT_DATA_KEY = isAdmin ? 'sofire_crm2' : getTenantDataKey(t.id);
+      setSession({
+        username: t.username, name: t.company || t.username, email: t.email,
+        role: t.role, tenantId: isAdmin ? null : t.id,
+        tenantName: isAdmin ? null : t.company,
+      }, true);
+      state = { invoices:[], customers:[], payments:[], expenses:[], taxPayments:[], emailLog:[],
+        nextInvNum: 202600001, editingId:null, editingExpId:null, editingCustId:null,
+        currentSendInvId:null, currentSendType:null,
+        settings: result.settings || { company:'', tagline:'', owner:'', phone:'', email:'',
+          website:'', address:'', bank:'', accHolder:'', accNum:'', branch:'', accType:'',
+          taxNum:'', fyStart:3, bkEmail:'', defaultRefundPolicy:'', defaultClientObligations:'', logoData:null }
+      };
+      load(); // instant local cache
+      showApp();
+      resetBtn();
+      // Pull fresh data from Supabase in background
+      pullFromSupabase().then(pulled => {
+        if(pulled){ renderDashboard(); updateSidebarBranding(); applyTheme(); updateEmailBadge(); }
+      });
+      return;
+    } else if (result.success === false) {
+      errEl.textContent = result.error || 'Incorrect username or password.';
+      errEl.classList.add('show');
+      document.getElementById('login-password').value = '';
+      resetBtn(); return;
+    }
+    // Network/server error — fall through to local auth
+    console.warn('Supabase unavailable, using local auth');
+  } catch(e) { console.warn('Supabase auth error:', e.message); }
+
+  // ── 2. Fallback: local auth (offline / Supabase unreachable)
   const stored = JSON.parse(localStorage.getItem('sofire_credentials') || 'null');
   const adminCreds = stored || ADMIN_USER;
   if (username === adminCreds.username && hash === adminCreds.passwordHash) {
     window.CURRENT_DATA_KEY = 'sofire_crm2';
     setSession({ ...adminCreds, role: 'superadmin', username: adminCreds.username,
       name: adminCreds.name||'Juan Du Plessis', email: adminCreds.email||'juan@sofire-it.co.za' }, true);
-    // Reset and reload from admin namespace for clean state
-    state = { invoices:[], customers:[], payments:[], expenses:[], taxPayments:[],
+    state = { invoices:[], customers:[], payments:[], expenses:[], taxPayments:[], emailLog:[],
       nextInvNum: 202600001, editingId:null, editingExpId:null, editingCustId:null,
       currentSendInvId:null, currentSendType:null,
       settings:{ company:'', tagline:'', owner:'', phone:'', email:'', website:'', address:'',
-        bank:'', accHolder:'', accNum:'', branch:'', accType:'', taxNum:'', vatRate:15,
-        vatOnInvoices:false, fyStart:3, bkEmail:'', defaultRefundPolicy:'',
-        defaultClientObligations:'', logoData:null } };
-    load(); showApp(); return;
+        bank:'', accHolder:'', accNum:'', branch:'', accType:'', taxNum:'',
+        fyStart:3, bkEmail:'', defaultRefundPolicy:'', defaultClientObligations:'', logoData:null } };
+    load(); showApp(); resetBtn(); return;
   }
 
-  // ── 2. Check internal portal users (Finance, Manager etc.)
   const users = getUsers();
   const internalUser = users.find(u => u.username === username && u.passwordHash === hash);
   if (internalUser) {
-    window.CURRENT_DATA_KEY = 'sofire_crm2'; // internal users see admin's data
+    window.CURRENT_DATA_KEY = 'sofire_crm2';
     setSession({ username: internalUser.username, name: internalUser.name,
       email: internalUser.email, role: internalUser.role }, true);
-    // Reset and reload from admin namespace to ensure clean state
-    state = { invoices:[], customers:[], payments:[], expenses:[], taxPayments:[],
+    state = { invoices:[], customers:[], payments:[], expenses:[], taxPayments:[], emailLog:[],
       nextInvNum: 202600001, editingId:null, editingExpId:null, editingCustId:null,
       currentSendInvId:null, currentSendType:null,
       settings:{ company:'', tagline:'', owner:'', phone:'', email:'', website:'', address:'',
-        bank:'', accHolder:'', accNum:'', branch:'', accType:'', taxNum:'', vatRate:15,
-        vatOnInvoices:false, fyStart:3, bkEmail:'', defaultRefundPolicy:'',
-        defaultClientObligations:'', logoData:null } };
-    load(); showApp(); return;
+        bank:'', accHolder:'', accNum:'', branch:'', accType:'', taxNum:'',
+        fyStart:3, bkEmail:'', defaultRefundPolicy:'', defaultClientObligations:'', logoData:null } };
+    load(); showApp(); resetBtn(); return;
   }
 
-  // ── 3. Check client tenant logins
-  // First try localStorage (admin's browser has all tenants)
+  // Check client tenants (local fallback)
   const tenants = getTenants();
   let tenant = tenants.find(t => t.username === username && t.passwordHash === hash);
-
-  // If not found in localStorage (fresh browser / incognito),
-  // try the URL-embedded credentials (?tenant=ID&u=username&h=base64hash)
   if (!tenant) {
     const up = new URLSearchParams(window.location.search);
-    const urlTenantId = up.get('tenant');
-    const urlU        = up.get('u');
-    const urlH        = up.get('h'); // base64url-encoded SHA-256 hash
+    const urlTenantId = up.get('tenant'), urlU = up.get('u'), urlH = up.get('h');
     if (urlTenantId && urlU && urlH && urlU === username) {
-      // Decode the base64url back to hex hash
       const b64 = urlH.replace(/-/g,'+').replace(/_/g,'/');
       let decodedHash = '';
-      try {
-        const raw = atob(b64);
-        decodedHash = raw; // raw IS the hex hash string stored as base64
-      } catch(e) { decodedHash = ''; }
+      try { decodedHash = atob(b64); } catch(e) {}
       if (decodedHash === hash) {
-        // Valid — create a synthetic tenant object from URL params
-        // Load any existing tenant data they may have saved in this browser
         const storedTenantData = JSON.parse(localStorage.getItem(getTenantDataKey(urlTenantId))||'{}');
-        tenant = {
-          id: urlTenantId,
-          username: urlU,
+        tenant = { id: urlTenantId, username: urlU,
           company: storedTenantData?.settings?.company || urlU,
-          email: storedTenantData?.settings?.email || '',
-          passwordHash: hash,
-          status: 'active'
-        };
-        // Cache this tenant in localStorage for future logins from this browser
-        const existingTenants = getTenants();
-        if (!existingTenants.find(t=>t.id===urlTenantId)) {
-          existingTenants.push(tenant);
-          saveTenants(existingTenants);
-        }
+          email: storedTenantData?.settings?.email || '', passwordHash: hash, status: 'active' };
+        const et = getTenants();
+        if (!et.find(t=>t.id===urlTenantId)) { et.push(tenant); saveTenants(et); }
       }
     }
   }
-
   if (tenant) {
     if (tenant.status === 'suspended') {
       errEl.textContent = 'Your portal has been suspended. Please contact your CRM provider.';
-      errEl.classList.add('show'); return;
+      errEl.classList.add('show'); resetBtn(); return;
     }
-    // Set tenant namespace
     window.CURRENT_DATA_KEY = getTenantDataKey(tenant.id);
     setSession({ username: tenant.username, name: tenant.company, email: tenant.email,
       role: 'admin', tenantId: tenant.id, tenantName: tenant.company }, true);
-    // Reset state completely — prevents admin data from bleeding into tenant view
-    state = {
-      invoices:[], customers:[], payments:[], expenses:[], taxPayments:[], emailLog:[],
+    state = { invoices:[], customers:[], payments:[], expenses:[], taxPayments:[], emailLog:[],
       nextInvNum: 202600001, editingId:null, editingExpId:null, editingCustId:null,
       currentSendInvId:null, currentSendType:null,
-      settings:{
-        company: tenant.company || '', tagline:'', owner: tenant.contact || '',
-        phone: tenant.phone || '', email: tenant.email || '',
-        website:'', address:'', bank:'', accHolder:'', accNum:'', branch:'', accType:'',
-        taxNum:'', vatRate:15, vatOnInvoices:false, fyStart:3, bkEmail:'',
-        defaultRefundPolicy:'', defaultClientObligations:'', logoData:null
-      }
+      settings:{ company: tenant.company||'', tagline:'', owner: tenant.contact||'',
+        phone: tenant.phone||'', email: tenant.email||'', website:'', address:'',
+        bank:'', accHolder:'', accNum:'', branch:'', accType:'', taxNum:'',
+        fyStart:3, bkEmail:'', defaultRefundPolicy:'', defaultClientObligations:'', logoData:null }
     };
-    // Load their saved data (overwrites defaults if they have any)
-    load();
-    showApp();
-    return;
+    load(); showApp(); resetBtn(); return;
   }
 
-  // ── No match
-  errEl.classList.remove('show');
   errEl.textContent = 'Incorrect username or password. Please try again.';
   errEl.classList.add('show');
   document.getElementById('login-password').value = '';
+  resetBtn();
 }
 
 function doLogout() {
   if (!confirm('Sign out of Sofire-IT CRM?')) return;
   clearSession();
+  setDbToken(null);
   showLogin();
+}
+
+async function migrateToSupabase() {
+  if (!getDbToken()) {
+    toast('Sign in first — Supabase migration requires an active session', 'error'); return;
+  }
+  if (!confirm('This will push all your current local data to Supabase cloud storage.\n\nYour local data is kept — this just copies it up.\n\nContinue?')) return;
+
+  const btn = document.getElementById('migrate-btn');
+  if(btn){ btn.textContent='☁ Migrating...'; btn.disabled=true; }
+
+  try {
+    const result = await dbCall('sync.push', { state });
+    if (result.success) {
+      toast(`✓ Migrated to Supabase — ${result.pushed.invoices} invoices, ${result.pushed.customers} customers, ${result.pushed.payments} payments, ${result.pushed.expenses} expenses`, 'success');
+      if(btn){ btn.textContent='✓ Migrated'; btn.style.color='var(--green)'; }
+    } else {
+      toast('Migration failed: ' + (result.error||'Unknown error'), 'error');
+      if(btn){ btn.textContent='☁ Migrate to Supabase'; btn.disabled=false; }
+    }
+  } catch(e) {
+    toast('Migration error: ' + e.message, 'error');
+    if(btn){ btn.textContent='☁ Migrate to Supabase'; btn.disabled=false; }
+  }
 }
 
 function showLogin(tenantOverride) {
@@ -2788,7 +2900,9 @@ function showApp() {
   document.title = _co + ' — CRM';
   applyTheme(_s);
   updateSidebarBranding();
-  updateEmailBadge();  // re-run after load() so tenant's own settings are used
+  updateEmailBadge();
+  // Refresh Supabase session validity check in background
+  if(getDbToken()) dbCall('auth.verify').then(r=>{ if(!r.valid){ setDbToken(null); console.log('Session expired'); } });  // re-run after load() so tenant's own settings are used
   applyRoleRestrictions();
   renderDashboard();
 }
@@ -3028,12 +3142,15 @@ let charts = {};
 //  PERSISTENCE
 // ============================================================
 function getDataKey(){ return window.CURRENT_DATA_KEY || 'sofire_crm2'; }
-function save(){try{localStorage.setItem(getDataKey(),JSON.stringify(state));}catch(e){}}
+function save(){
+  try{ localStorage.setItem(getDataKey(), JSON.stringify(state)); } catch(e){}
+  scheduleSyncToSupabase();
+}
 function load(){
   try{
     const d=localStorage.getItem(getDataKey());
-    if(d){const p=JSON.parse(d);state={...state,...p};state.settings={...state.settings,...(p.settings||{})};}}
-  catch(e){}
+    if(d){const p=JSON.parse(d);state={...state,...p};state.settings={...state.settings,...(p.settings||{})};}
+  } catch(e){}
 }
 
 // ============================================================

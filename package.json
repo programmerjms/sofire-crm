@@ -1,0 +1,9 @@
+{
+  "name": "sofire-crm-functions",
+  "version": "2.0.0",
+  "description": "Netlify serverless functions for Sofire-IT CRM",
+  "dependencies": {
+    "nodemailer": "^6.9.13",
+    "@supabase/supabase-js": "^2.39.0"
+  }
+}
