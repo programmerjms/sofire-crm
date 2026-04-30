@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sofire-IT CRM — Data Recovery</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0a0f;--surface:#13131a;--surface2:#1c1c27;--border:#2a2a3d;--accent:#ff3c3c;--green:#2dda8c;--yellow:#ffc24a;--blue:#4a9eff;--text:#f0f0f5;--text2:#9090a8;--text3:#5a5a72}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:640px;max-width:100%;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,.6)}
+.header{background:linear-gradient(135deg,#13131a,#1c1c27);padding:28px 32px;border-bottom:1px solid var(--border)}
+.title{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:4px}
+.sub{font-size:12px;color:var(--text3);font-family:'DM Mono',monospace;letter-spacing:1px;text-transform:uppercase}
+.body{padding:28px 32px}
+.step{margin-bottom:22px}
+.step-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace;margin-bottom:10px}
+.status-box{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;font-size:12px;color:var(--text2);line-height:1.8}
+.row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(42,42,61,.4)}
+.row:last-child{border-bottom:none}
+.key{font-family:'DM Mono',monospace;font-size:11px;color:var(--text2)}
+.val{font-size:12px;font-weight:600}
+.found{color:var(--green)}.warn{color:var(--yellow)}.missing{color:var(--text3)}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:11px 20px;border-radius:8px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;transition:all .15s;width:100%;justify-content:center;margin-top:10px}
+.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{opacity:.85}
+.btn-green{background:var(--green);color:#0a0a0f}.btn-green:hover{opacity:.85}
+.btn-ghost{background:var(--surface2);color:var(--text2);border:1px solid var(--border)}.btn-ghost:hover{background:var(--border)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.log{background:#0a0a0f;border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-family:'DM Mono',monospace;font-size:11px;color:var(--text2);max-height:200px;overflow-y:auto;margin-top:10px;line-height:1.8}
+.log .ok{color:var(--green)}.log .err{color:var(--accent)}.log .info{color:var(--blue)}.log .warn{color:var(--yellow)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.stat{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center}
+.stat-num{font-family:'Syne',sans-serif;font-size:24px;font-weight:700;margin-bottom:2px}
+.stat-lbl{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace}
+input,select{width:100%;padding:10px 13px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;margin-top:6px}
+label{font-size:12px;color:var(--text2)}
+.divider{height:1px;background:var(--border);margin:20px 0}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="header">
+    <div class="title">🛟 Data Recovery Tool</div>
+    <div class="sub">Sofire-IT CRM — Restore &amp; Migrate</div>
+  </div>
+  <div class="body">
+
+    <!-- Step 1: Scan -->
+    <div class="step">
+      <div class="step-label">Step 1 — What's in your browser storage</div>
+      <div class="status-box" id="scan-box">Scanning localStorage...</div>
+      <div class="grid" id="stat-grid" style="display:none"></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Step 2: Migrate -->
+    <div class="step">
+      <div class="step-label">Step 2 — Push to Supabase</div>
+      <div>
+        <label>Your CRM Password</label>
+        <input type="password" id="pw-input" placeholder="Enter your CRM password (Sofire@2024! or your new one)">
+      </div>
+      <div style="margin-top:10px">
+        <label>Your CRM Username (usually: juan)</label>
+        <input type="text" id="user-input" value="juan">
+      </div>
+      <button class="btn btn-primary" id="migrate-btn" onclick="doMigrate()" style="margin-top:14px" disabled>
+        ☁ Authenticate &amp; Push to Supabase
+      </button>
+      <div class="log" id="log" style="display:none"></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Step 3: Done -->
+    <div id="done-step" style="display:none">
+      <div class="step-label">✓ Migration Complete</div>
+      <div class="grid" id="done-grid"></div>
+      <button class="btn btn-green" onclick="window.location.href='index.html'" style="margin-top:16px">→ Open CRM</button>
+    </div>
+
+    <div style="text-align:center;margin-top:8px">
+      <a href="index.html" style="font-size:12px;color:var(--text3)">← Back to CRM</a>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const DB = '/.netlify/functions/db';
+
+async function sha256(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+function log(msg, type='info') {
+  const el = document.getElementById('log');
+  el.style.display = 'block';
+  const d = document.createElement('div');
+  d.className = type;
+  d.textContent = new Date().toLocaleTimeString() + '  ' + msg;
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ── Scan all localStorage keys for CRM data
+const CRM_KEYS = ['sofire_crm2'];
+// Also check for tenant keys
+Object.keys(localStorage).filter(k => k.startsWith('sofire_crm2_tenant_')).forEach(k => CRM_KEYS.push(k));
+
+let foundData = null;
+let foundKey  = null;
+
+function scan() {
+  const box = document.getElementById('scan-box');
+  box.innerHTML = '';
+
+  for (const key of CRM_KEYS) {
+    const raw = localStorage.getItem(key);
+    if (!raw) {
+      const r = document.createElement('div');
+      r.className = 'row';
+      r.innerHTML = `<span class="key">${key}</span><span class="val missing">empty</span>`;
+      box.appendChild(r);
+      continue;
+    }
+    try {
+      const data = JSON.parse(raw);
+      const inv  = data.invoices?.length  || 0;
+      const cust = data.customers?.length || 0;
+      const pay  = data.payments?.length  || 0;
+      const exp  = data.expenses?.length  || 0;
+      const total = inv + cust + pay + exp;
+
+      const r = document.createElement('div');
+      r.className = 'row';
+      r.innerHTML = `<span class="key">${key}</span>
+        <span class="val ${total>0?'found':'missing'}">
+          ${inv} invoices · ${cust} customers · ${pay} payments · ${exp} expenses
+        </span>`;
+      box.appendChild(r);
+
+      if (total > 0 && !foundData) {
+        foundData = data;
+        foundKey  = key;
+      }
+    } catch(e) {
+      const r = document.createElement('div');
+      r.className = 'row';
+      r.innerHTML = `<span class="key">${key}</span><span class="val warn">corrupt JSON</span>`;
+      box.appendChild(r);
+    }
+  }
+
+  if (!foundData) {
+    box.innerHTML += '<div style="color:var(--yellow);font-size:12px;padding:8px 0">⚠ No CRM data found in this browser. Try the recover.html tool instead.</div>';
+    return;
+  }
+
+  // Show stat cards
+  const grid = document.getElementById('stat-grid');
+  grid.style.display = 'grid';
+  const inv  = foundData.invoices?.length  || 0;
+  const cust = foundData.customers?.length || 0;
+  const pay  = foundData.payments?.length  || 0;
+  const exp  = foundData.expenses?.length  || 0;
+  grid.innerHTML = `
+    <div class="stat"><div class="stat-num" style="color:var(--accent)">${inv}</div><div class="stat-lbl">Invoices</div></div>
+    <div class="stat"><div class="stat-num" style="color:var(--blue)">${cust}</div><div class="stat-lbl">Customers</div></div>
+    <div class="stat"><div class="stat-num" style="color:var(--green)">${pay}</div><div class="stat-lbl">Payments</div></div>
+    <div class="stat"><div class="stat-num" style="color:var(--yellow)">${exp}</div><div class="stat-lbl">Expenses</div></div>`;
+
+  document.getElementById('migrate-btn').disabled = false;
+}
+
+async function doMigrate() {
+  const pw   = document.getElementById('pw-input').value;
+  const user = document.getElementById('user-input').value.trim().toLowerCase();
+  if (!pw || !user) { log('Enter your password and username', 'err'); return; }
+  if (!foundData)   { log('No data found to migrate', 'err'); return; }
+
+  const btn = document.getElementById('migrate-btn');
+  btn.textContent = '⏳ Authenticating...'; btn.disabled = true;
+
+  log('Hashing password...', 'info');
+  const hash = await sha256(pw);
+
+  log('Authenticating with Supabase...', 'info');
+  let token;
+  try {
+    const r = await fetch(DB, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'auth.login', payload: { username: user, passwordHash: hash } })
+    });
+    const res = await r.json();
+    if (!res.success || !res.token) {
+      log('Auth failed: ' + (res.error || 'Wrong password?'), 'err');
+      btn.textContent = '☁ Try Again'; btn.disabled = false;
+      return;
+    }
+    token = res.token;
+    log('✓ Authenticated as ' + user, 'ok');
+  } catch(e) {
+    log('Network error: ' + e.message + ' — is db.js deployed?', 'err');
+    btn.textContent = '☁ Try Again'; btn.disabled = false;
+    return;
+  }
+
+  btn.textContent = '⏳ Pushing data...';
+  log('Pushing ' + (foundData.invoices?.length||0) + ' invoices, ' + (foundData.expenses?.length||0) + ' expenses...', 'info');
+
+  try {
+    const r = await fetch(DB, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Session-Token': token },
+      body: JSON.stringify({ action: 'sync.push', payload: { state: foundData }, token })
+    });
+    const res = await r.json();
+    if (res.success) {
+      const p = res.pushed;
+      log(`✓ Pushed: ${p.invoices||0} invoices, ${p.customers||0} customers, ${p.payments||0} payments, ${p.expenses||0} expenses`, 'ok');
+
+      // Show done
+      document.getElementById('done-step').style.display = 'block';
+      const dg = document.getElementById('done-grid');
+      dg.innerHTML = `
+        <div class="stat"><div class="stat-num" style="color:var(--accent)">${p.invoices||0}</div><div class="stat-lbl">Invoices</div></div>
+        <div class="stat"><div class="stat-num" style="color:var(--blue)">${p.customers||0}</div><div class="stat-lbl">Customers</div></div>
+        <div class="stat"><div class="stat-num" style="color:var(--green)">${p.payments||0}</div><div class="stat-lbl">Payments</div></div>
+        <div class="stat"><div class="stat-num" style="color:var(--yellow)">${p.expenses||0}</div><div class="stat-lbl">Expenses</div></div>`;
+
+      // Save token for main app
+      localStorage.setItem('sofire_db_token', token);
+      btn.textContent = '✓ Done'; btn.style.background = 'var(--green)'; btn.style.color = '#000';
+    } else {
+      log('Push failed: ' + (res.error||'Unknown'), 'err');
+      btn.textContent = '☁ Try Again'; btn.disabled = false;
+    }
+  } catch(e) {
+    log('Push error: ' + e.message, 'err');
+    btn.textContent = '☁ Try Again'; btn.disabled = false;
+  }
+}
+
+// Auto-scan on load
+window.addEventListener('load', () => setTimeout(scan, 200));
+</script>
+</body>
+</html>

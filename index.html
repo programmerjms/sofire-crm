@@ -2584,9 +2584,25 @@ async function pushToSupabase() {
                        state.payments?.length  > 0 ||
                        state.expenses?.length  > 0;
   if (!hasLocalData) {
-    console.log('Skipping Supabase push — local state is empty');
+    console.log('Skipping Supabase push — local state is empty, not overwriting cloud data');
     return;
   }
+  // Cross-check: state must also match what is in localStorage (prevents pushing reset state)
+  try {
+    const raw = localStorage.getItem(getDataKey());
+    if (raw) {
+      const local = JSON.parse(raw);
+      const localHasData = (local.invoices?.length||0) + (local.customers?.length||0) +
+                           (local.payments?.length||0)  + (local.expenses?.length||0);
+      const stateHasData = (state.invoices?.length||0)  + (state.customers?.length||0) +
+                           (state.payments?.length||0)   + (state.expenses?.length||0);
+      // If localStorage has significantly more records than in-memory state, skip push
+      if (localHasData > stateHasData + 10) {
+        console.warn('Skipping push: in-memory state ('+stateHasData+' records) appears incomplete vs localStorage ('+localHasData+' records)');
+        return;
+      }
+    }
+  } catch(e) {}
   const result = await dbCall('sync.push', { state });
   if (result.error) {
     console.warn('Supabase sync failed:', result.error);
@@ -2881,9 +2897,48 @@ async function migrateToSupabase() {
   if(btn){ btn.textContent='☁ Migrating...'; btn.disabled=true; }
 
   try {
-    const result = await dbCall('sync.push', { state });
+    // CRITICAL: Read DIRECTLY from localStorage — never push the in-memory state
+    // which may have been reset empty by the login flow.
+    // localStorage is always the safe source of truth for migration.
+    const dataKey = getDataKey();
+    const rawData = localStorage.getItem(dataKey);
+    if (!rawData) {
+      toast('No local data found to migrate (localStorage is empty for key: '+dataKey+')', 'error');
+      if(btn){ btn.textContent='☁ Migrate to Supabase'; btn.disabled=false; }
+      return;
+    }
+
+    let localState;
+    try { localState = JSON.parse(rawData); }
+    catch(e) { toast('Could not read local data: ' + e.message, 'error'); if(btn){btn.textContent='☁ Migrate to Supabase';btn.disabled=false;} return; }
+
+    // Count what we have
+    const inv  = localState.invoices?.length  || 0;
+    const cust = localState.customers?.length || 0;
+    const pay  = localState.payments?.length  || 0;
+    const exp  = localState.expenses?.length  || 0;
+
+    if (inv + cust + pay + exp === 0) {
+      toast('Local data appears empty — nothing to migrate. Check you are logged into the correct account.', 'error');
+      if(btn){ btn.textContent='☁ Migrate to Supabase'; btn.disabled=false; }
+      return;
+    }
+
+    console.log('[migrate] Found local data:', inv, 'invoices,', cust, 'customers,', pay, 'payments,', exp, 'expenses');
+
+    const result = await dbCall('sync.push', { state: localState });
     if (result.success) {
       const p = result.pushed;
+      // Update in-memory state to match what we just pushed
+      state.invoices    = localState.invoices    || [];
+      state.customers   = localState.customers   || [];
+      state.payments    = localState.payments    || [];
+      state.expenses    = localState.expenses    || [];
+      state.taxPayments = localState.taxPayments || [];
+      state.emailLog    = localState.emailLog    || [];
+      if (localState.settings) state.settings = { ...state.settings, ...localState.settings };
+      if (localState.nextInvNum) state.nextInvNum = localState.nextInvNum;
+      renderDashboard();
       toast(`✓ Migrated — ${p.invoices||0} invoices, ${p.customers||0} customers, ${p.payments||0} payments, ${p.expenses||0} expenses`, 'success');
       if(btn){ btn.textContent='✓ Migrated to Supabase'; btn.style.color='var(--green)'; btn.disabled=false; }
     } else {
