@@ -143,7 +143,7 @@ create table if not exists expenses (
   amount       numeric(12,2) not null,
   category     text,
   method       text default 'Bank Transaction',
-  desc         text,
+  description  text,
   notes        text,
   receipt_name text,
   receipt_data text,                    -- base64

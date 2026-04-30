@@ -201,7 +201,7 @@ exports.handler = async (event) => {
 
       const mapExpense = r => ({
         id: r.id, date: r.date, amount: r.amount, category: r.category,
-        method: r.method, desc: r.desc, notes: r.notes,
+        method: r.method, desc: r.description, notes: r.notes,
         receiptName: r.receipt_name, receiptData: r.receipt_data,
       });
 
@@ -316,7 +316,7 @@ exports.handler = async (event) => {
       if (s.expenses?.length) {
         ops.push(db.from('expenses').upsert(s.expenses.map(e => ({
           id: e.id, tenant_id: tenantId, date: e.date, amount: e.amount,
-          category: e.category, method: e.method, desc: e.desc, notes: e.notes,
+          category: e.category, method: e.method, description: e.desc, notes: e.notes,
           receipt_name: e.receiptName, receipt_data: e.receiptData,
         })), { onConflict: 'id' }));
       }
