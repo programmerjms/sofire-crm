@@ -2576,12 +2576,20 @@ function scheduleSyncToSupabase() {
 }
 
 async function pushToSupabase() {
-  if (!getDbToken()) return; // not logged in via Supabase yet
+  if (!getDbToken()) return;
   _syncPending = false;
+  // Safety: never push an empty state to Supabase — it would wipe cloud data
+  const hasLocalData = state.invoices?.length > 0 ||
+                       state.customers?.length > 0 ||
+                       state.payments?.length  > 0 ||
+                       state.expenses?.length  > 0;
+  if (!hasLocalData) {
+    console.log('Skipping Supabase push — local state is empty');
+    return;
+  }
   const result = await dbCall('sync.push', { state });
   if (result.error) {
     console.warn('Supabase sync failed:', result.error);
-    // Fall back to localStorage — data is safe there
   }
 }
 
@@ -2592,12 +2600,29 @@ async function pullFromSupabase() {
     console.warn('Supabase pull failed:', result.error);
     return false;
   }
-  // Merge pulled state into current state, preserving structure
   const pulled = result.state;
-  state.invoices    = pulled.invoices    || [];
-  state.customers   = pulled.customers   || [];
-  state.payments    = pulled.payments    || [];
-  state.expenses    = pulled.expenses    || [];
+
+  // SAFETY: Only overwrite local data if Supabase actually has data.
+  // If Supabase is empty (not migrated yet) keep the localStorage data.
+  const sbHasData = (pulled.invoices?.length   > 0) ||
+                    (pulled.customers?.length   > 0) ||
+                    (pulled.payments?.length    > 0) ||
+                    (pulled.expenses?.length    > 0);
+
+  if (!sbHasData) {
+    console.log('Supabase is empty — keeping local data. Run ☁ Migrate to Supabase to upload your data.');
+    // Still update settings if Supabase has them (logo, theme etc.)
+    if (pulled.settings && pulled.settings.company) {
+      state.settings = { ...state.settings, ...pulled.settings };
+    }
+    return false; // signal: no data pulled
+  }
+
+  // Supabase has data — use it
+  state.invoices    = pulled.invoices;
+  state.customers   = pulled.customers;
+  state.payments    = pulled.payments;
+  state.expenses    = pulled.expenses;
   state.taxPayments = pulled.taxPayments || [];
   state.emailLog    = pulled.emailLog    || [];
   if (pulled.settings && Object.keys(pulled.settings).length) {
@@ -2712,12 +2737,23 @@ async function doLogin() {
           website:'', address:'', bank:'', accHolder:'', accNum:'', branch:'', accType:'',
           taxNum:'', fyStart:3, bkEmail:'', defaultRefundPolicy:'', defaultClientObligations:'', logoData:null }
       };
-      load(); // instant local cache
+      // Load localStorage cache FIRST — this is the source of truth until Supabase has data
+      load();
       showApp();
       resetBtn();
-      // Pull fresh data from Supabase in background
+      // After display, try to pull from Supabase in background
+      // pullFromSupabase() will NOT overwrite if Supabase is empty
       pullFromSupabase().then(pulled => {
-        if(pulled){ renderDashboard(); updateSidebarBranding(); applyTheme(); updateEmailBadge(); }
+        if (pulled) {
+          // Supabase had data — refresh the UI
+          renderDashboard(); updateSidebarBranding(); applyTheme(); updateEmailBadge();
+          toast('✓ Data loaded from Supabase', 'success');
+        } else if (getDbToken()) {
+          // Supabase is empty — show migrate prompt
+          setTimeout(() => {
+            toast('☁ Your data is local only — click Settings → Migrate to Supabase to back it up', 'info');
+          }, 2000);
+        }
       });
       return;
     } else if (result.success === false) {
