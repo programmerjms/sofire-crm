@@ -1,0 +1,79 @@
+{
+  "name": "sofire-it-crm",
+  "productName": "Sofire-IT CRM",
+  "version": "1.0.0",
+  "description": "Invoice CRM for Sofire-IT Support",
+  "author": {
+    "name": "Juan Du Plessis",
+    "email": "juan@sofire-it.co.za"
+  },
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win":   "electron-builder --win",
+    "build:mac":   "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "build:all":   "electron-builder --win --mac --linux",
+    "pack":        "electron-builder --dir"
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0"
+  },
+  "devDependencies": {
+    "electron":         "^29.0.0",
+    "electron-builder": "^24.9.0"
+  },
+  "build": {
+    "appId": "co.za.sofire-it.crm",
+    "productName": "Sofire-IT CRM",
+    "copyright": "© 2026 Sofire-IT Support (Juan Du Plessis)",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "app/**/*",
+      "assets/**/*",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis",     "arch": ["x64", "ia32"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "assets/icon.ico",
+      "artifactName": "Sofire-IT-CRM-Setup-${version}.${ext}",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Sofire-IT CRM",
+      "runAfterFinish": true
+    },
+    "mac": {
+      "target": [
+        { "target": "dmg",  "arch": ["x64", "arm64"] },
+        { "target": "zip",  "arch": ["x64", "arm64"] }
+      ],
+      "icon": "assets/icon.icns",
+      "artifactName": "Sofire-IT-CRM-${version}-${arch}.${ext}",
+      "category": "public.app-category.finance",
+      "darkModeSupport": true
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "icon": "assets/icon.png",
+      "category": "Office;Finance",
+      "artifactName": "Sofire-IT-CRM-${version}.${ext}"
+    }
+  }
+}
