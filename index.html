@@ -1765,6 +1765,25 @@ textarea{resize:vertical;min-height:70px}
       <div class="form-grid">
         <div class="form-group"><label>To Email *</label><input type="email" id="send-to-email" placeholder="client@example.co.za"></div>
         <div class="form-group"><label>To Name</label><input type="text" id="send-to-name" placeholder="Client Name"></div>
+        <!-- CC / BCC toggle -->
+        <div class="form-group full" style="margin-bottom:4px">
+          <div style="display:flex;align-items:center;gap:14px">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--text2)">
+              <input type="checkbox" id="send-show-cc" onchange="toggleCcBcc()" style="accent-color:var(--accent)"> Add CC
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--text2)">
+              <input type="checkbox" id="send-show-bcc" onchange="toggleCcBcc()" style="accent-color:var(--accent)"> Add BCC
+            </label>
+          </div>
+        </div>
+        <div class="form-group full" id="send-cc-row" style="display:none">
+          <label>CC <span style="font-size:10px;color:var(--text3);font-weight:400">— comma-separated for multiple</span></label>
+          <input type="text" id="send-cc" placeholder="cc@example.com, another@example.com">
+        </div>
+        <div class="form-group full" id="send-bcc-row" style="display:none">
+          <label>BCC <span style="font-size:10px;color:var(--text3);font-weight:400">— hidden recipients</span></label>
+          <input type="text" id="send-bcc" placeholder="bcc@example.com">
+        </div>
         <div class="form-group full"><label>Subject</label><input type="text" id="send-subject"></div>
         <div class="form-group full"><label>Message Body</label><textarea id="send-message" style="min-height:110px"></textarea></div>
         <!-- Attachment preview -->
@@ -4245,6 +4264,17 @@ function openExpenseSendModal() {
   state.currentSendInvId = null;
   prefillSendModal(null, 'expenses');
 }
+function toggleCcBcc() {
+  const showCC  = document.getElementById('send-show-cc')?.checked;
+  const showBCC = document.getElementById('send-show-bcc')?.checked;
+  const ccRow   = document.getElementById('send-cc-row');
+  const bccRow  = document.getElementById('send-bcc-row');
+  if (ccRow)  ccRow.style.display  = showCC  ? '' : 'none';
+  if (bccRow) bccRow.style.display = showBCC ? '' : 'none';
+  if (!showCC)  { const el=document.getElementById('send-cc');  if(el) el.value=''; }
+  if (!showBCC) { const el=document.getElementById('send-bcc'); if(el) el.value=''; }
+}
+
 function prefillSendModal(inv, type) {
   const s = state.settings;
   state.currentSendType = type;
@@ -4262,6 +4292,16 @@ function prefillSendModal(inv, type) {
     document.getElementById('send-attach-label').textContent = `Invoice ${inv.number}.pdf will be generated and attached`;
   }
   document.getElementById('send-status-bar').style.display = 'none';
+  // Reset CC/BCC checkboxes and fields
+  const ccChk  = document.getElementById('send-show-cc');
+  const bccChk = document.getElementById('send-show-bcc');
+  const ccInp  = document.getElementById('send-cc');
+  const bccInp = document.getElementById('send-bcc');
+  if(ccChk)  ccChk.checked  = false;
+  if(bccChk) bccChk.checked = false;
+  if(ccInp)  ccInp.value    = '';
+  if(bccInp) bccInp.value   = '';
+  toggleCcBcc();
   openModal('send-modal');
 }
 function sendMailto() {
@@ -4401,8 +4441,15 @@ async function sendViaSMTP() {
         contentType: 'application/pdf'
       });
     }
+    // Collect CC/BCC values (comma-separated, cleaned)
+    const ccRaw  = document.getElementById('send-cc')?.value.trim()  || '';
+    const bccRaw = document.getElementById('send-bcc')?.value.trim() || '';
+    const cc  = ccRaw  ? ccRaw.split(',').map(e=>e.trim()).filter(Boolean)  : [];
+    const bcc = bccRaw ? bccRaw.split(',').map(e=>e.trim()).filter(Boolean) : [];
     const payload = {
       to, toName, subject, message,
+      cc:  cc.length  ? cc  : undefined,
+      bcc: bcc.length ? bcc : undefined,
       htmlBody: htmlBody || null,
       attachments
     };
@@ -4422,6 +4469,8 @@ async function sendViaSMTP() {
         type: isExp ? 'other' : 'invoice',
         to, toName,
         subject,
+        cc:  cc.length  ? cc.join(', ')  : '',
+        bcc: bcc.length ? bcc.join(', ') : '',
         invoiceId:   logInv?.id || null,
         invoiceNum:  logInv?.number || null,
         status: 'sent'
@@ -5542,7 +5591,11 @@ function renderEmailLog(){
     return `<tr>
       <td class="mono" style="color:var(--text2);font-size:11px;white-space:nowrap">${dateStr}<br>${timeStr}</td>
       <td><span class="badge" style="background:${type.color}22;color:${type.color}">${type.text}</span></td>
-      <td style="font-size:12px">${e.toName||'—'}<br><span style="font-size:10px;color:var(--text3)">${e.to}</span></td>
+      <td style="font-size:12px">${e.toName||'—'}<br>
+        <span style="font-size:10px;color:var(--text3)">${e.to}</span>
+        ${e.cc?`<br><span style="font-size:10px;color:var(--text3)">CC: ${e.cc}</span>`:''}
+        ${e.bcc?`<br><span style="font-size:10px;color:var(--text3)">BCC: ${e.bcc}</span>`:''}
+      </td>
       <td style="font-size:12px">${e.subject||'—'}</td>
       <td style="font-size:11px">${e.invoiceNum?`<span class="mono" style="color:var(--accent)">${e.invoiceNum}</span>`:'—'}</td>
       <td><span style="color:${statusColor};font-size:11px">${e.status==='sent'?'✓ Sent':e.status==='failed'?'✗ Failed':'—'}</span></td>
