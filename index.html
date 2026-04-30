@@ -2565,8 +2565,15 @@ async function savePDFNative(filename, base64data) {
 // ============================================================
 //  SUPABASE CONFIG
 // ============================================================
-const SUPABASE_URL = 'https://gpslxejjpgchmrzriskv.supabase.co';
-const DB_ENDPOINT  = '/.netlify/functions/db';
+const SUPABASE_URL   = 'https://gpslxejjpgchmrzriskv.supabase.co';
+const NETLIFY_SITE   = 'https://sofire-it-finance-crm.netlify.app';
+// In Electron, relative URLs resolve to file:// — must use absolute Netlify URL
+const DB_ENDPOINT    = (typeof window !== 'undefined' && window.electronAPI?.isDesktop)
+  ? NETLIFY_SITE + '/.netlify/functions/db'
+  : '/.netlify/functions/db';
+const EMAIL_ENDPOINT = (typeof window !== 'undefined' && window.electronAPI?.isDesktop)
+  ? NETLIFY_SITE + EMAIL_ENDPOINT
+  : EMAIL_ENDPOINT;
 
 // Session token stored in localStorage for cross-tab persistence
 function getDbToken()  { return localStorage.getItem('sofire_db_token') || ''; }
@@ -2578,13 +2585,19 @@ async function dbCall(action, payload = {}, token = getDbToken()) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Session-Token': token,
+        'X-Session-Token': token || '',
+        'Origin': NETLIFY_SITE,
       },
       body: JSON.stringify({ action, payload, token }),
     });
+    if (!resp.ok && resp.status !== 200) {
+      const text = await resp.text().catch(()=>'');
+      console.error('dbCall HTTP error:', resp.status, text);
+      return { error: `HTTP ${resp.status}: ${text.slice(0,200)}` };
+    }
     return await resp.json();
   } catch (e) {
-    console.error('dbCall error:', e);
+    console.error('dbCall error:', e.message);
     return { error: e.message };
   }
 }
@@ -3196,6 +3209,10 @@ function showApp() {
   applyTheme(_s);
   updateSidebarBranding();
   updateEmailBadge();
+  // In Electron always pull fresh data from Supabase
+  if(IS_ELECTRON && getDbToken() && !document.getElementById('login-screen')?.classList.contains('show')){
+    pullFromSupabase().then(pulled=>{ if(pulled){ renderDashboard(); updateSidebarBranding(); } });
+  }
   // Check if we need a fresh Supabase pull (e.g. after logout+login)
   if(getDbToken()){
     const raw = localStorage.getItem(getDataKey()) || '{}';
@@ -4960,7 +4977,7 @@ async function sendViaSMTP() {
       htmlBody: htmlBody || null,
       attachments
     };
-    const resp = await fetch('/.netlify/functions/send-email', {
+    const resp = await fetch(EMAIL_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -5024,7 +5041,7 @@ async function sendTestEmail() {
   const status = document.getElementById('smtp-status');
   status.textContent = '⏳ Sending test...'; status.style.color = 'var(--text2)';
   try {
-    const resp = await fetch('/.netlify/functions/send-email', {
+    const resp = await fetch(EMAIL_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -6435,7 +6452,7 @@ async function sendReminder(){
   if(btn){ btn.textContent='⏳ Sending...'; btn.disabled=true; }
 
   try {
-    const resp = await fetch('/.netlify/functions/send-email',{
+    const resp = await fetch(EMAIL_ENDPOINT,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ to, toName: inv?.custName||'', subject, message, attachments:[] })
@@ -6482,7 +6499,7 @@ ${s.owner||s.company}
 ${s.phone||''}
 ${s.email||''}`;
   try {
-    const resp=await fetch('/.netlify/functions/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to,toName:inv.custName||'',subject,message,attachments:[]})});
+    const resp=await fetch(EMAIL_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to,toName:inv.custName||'',subject,message,attachments:[]})});
     const result=await resp.json();
     logEmail({type:'overdue',to,toName:inv.custName||'',subject,invoiceId:inv.id,invoiceNum:inv.number,status:resp.ok&&result.success?'sent':'failed'});
   } catch { logEmail({type:'overdue',to,toName:inv.custName||'',subject,invoiceId:inv.id,invoiceNum:inv.number,status:'failed'}); }
@@ -6668,6 +6685,20 @@ updatePreview();
 renderDashboard();
 // Show desktop badge if running in Electron
 if(IS_ELECTRON){ const b=document.getElementById('electron-badge'); if(b) b.style.display='inline'; }
+
+// In Electron: always pull fresh from Supabase on startup (can't rely on localStorage)
+if(IS_ELECTRON && getDbToken()){
+  setTimeout(()=>{
+    pullFromSupabase().then(pulled=>{
+      if(pulled){
+        renderDashboard(); updateSidebarBranding(); applyTheme(); updateEmailBadge();
+        toast('✓ Data loaded from Supabase','success');
+      } else {
+        toast('⚠ Could not load from Supabase — showing local data. Go to Settings → Pull from Supabase','error');
+      }
+    });
+  }, 800); // small delay to let the UI render first
+}
 </script>
 </body>
 </html>
