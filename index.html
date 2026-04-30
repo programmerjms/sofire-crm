@@ -982,6 +982,56 @@ textarea{resize:vertical;min-height:70px}
   </div>
 </div>
 
+<!-- Email View Modal -->
+<div class="modal-overlay" id="email-view-modal">
+  <div class="modal" style="max-width:640px;width:95vw">
+    <div class="modal-header">
+      <div class="modal-title">Email Details</div>
+      <button class="modal-close" onclick="closeModal('email-view-modal')">×</button>
+    </div>
+    <div class="modal-body" style="padding:0">
+
+      <!-- Header meta strip -->
+      <div style="background:var(--surface2);border-bottom:1px solid var(--border);padding:16px 20px">
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:12px">
+          <span style="color:var(--text3);font-family:'DM Mono',monospace;font-size:11px;padding-top:1px">FROM</span>
+          <span id="evm-from" style="color:var(--text)"></span>
+          <span style="color:var(--text3);font-family:'DM Mono',monospace;font-size:11px;padding-top:1px">TO</span>
+          <span id="evm-to" style="color:var(--text)"></span>
+          <div id="evm-cc-row" style="display:contents">
+            <span style="color:var(--text3);font-family:'DM Mono',monospace;font-size:11px;padding-top:1px">CC</span>
+            <span id="evm-cc" style="color:var(--text2)"></span>
+          </div>
+          <div id="evm-bcc-row" style="display:contents">
+            <span style="color:var(--text3);font-family:'DM Mono',monospace;font-size:11px;padding-top:1px">BCC</span>
+            <span id="evm-bcc" style="color:var(--text2)"></span>
+          </div>
+          <span style="color:var(--text3);font-family:'DM Mono',monospace;font-size:11px;padding-top:1px">SUBJECT</span>
+          <span id="evm-subject" style="color:var(--text);font-weight:600"></span>
+          <span style="color:var(--text3);font-family:'DM Mono',monospace;font-size:11px;padding-top:1px">SENT</span>
+          <span id="evm-date" style="color:var(--text2)"></span>
+          <span style="color:var(--text3);font-family:'DM Mono',monospace;font-size:11px;padding-top:1px">STATUS</span>
+          <span id="evm-status" style="color:var(--green)"></span>
+        </div>
+        <!-- Tags row -->
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap" id="evm-tags"></div>
+      </div>
+
+      <!-- Message body -->
+      <div style="padding:20px;max-height:380px;overflow-y:auto">
+        <div style="font-size:12px;color:var(--text3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Message</div>
+        <div id="evm-body" style="font-size:13px;color:var(--text);line-height:1.75;white-space:pre-wrap;background:var(--surface2);border-radius:8px;padding:14px 16px;border:1px solid var(--border)"></div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('email-view-modal')">Close</button>
+      <button class="btn btn-ghost btn-sm" id="evm-resend-btn" style="display:none">↺ Resend Invoice</button>
+      <button class="btn btn-primary btn-sm" id="evm-reminder-btn" style="display:none">✉ Send Reminder</button>
+    </div>
+  </div>
+</div>
+
 <!-- Reminder Wizard Modal -->
 <div class="modal-overlay" id="reminder-modal">
   <div class="modal" style="max-width:580px">
@@ -4469,6 +4519,7 @@ async function sendViaSMTP() {
         type: isExp ? 'other' : 'invoice',
         to, toName,
         subject,
+        body: message,
         cc:  cc.length  ? cc.join(', ')  : '',
         bcc: bcc.length ? bcc.join(', ') : '',
         invoiceId:   logInv?.id || null,
@@ -5537,6 +5588,9 @@ function logEmail(opts){
     to:         opts.to         || '',
     toName:     opts.toName     || '',
     subject:    opts.subject    || '',
+    body:       opts.body       || '',
+    cc:         opts.cc         || '',
+    bcc:        opts.bcc        || '',
     invoiceId:  opts.invoiceId  || null,
     invoiceNum: opts.invoiceNum || null,
     status:     opts.status     || 'sent',
@@ -5600,11 +5654,78 @@ function renderEmailLog(){
       <td style="font-size:11px">${e.invoiceNum?`<span class="mono" style="color:var(--accent)">${e.invoiceNum}</span>`:'—'}</td>
       <td><span style="color:${statusColor};font-size:11px">${e.status==='sent'?'✓ Sent':e.status==='failed'?'✗ Failed':'—'}</span></td>
       <td>
+        <button class="btn btn-ghost btn-sm" onclick="viewEmailLog('${e.id}')">👁 View</button>
         ${e.invoiceId?`<button class="btn btn-ghost btn-sm" onclick="quickSend('${e.invoiceId}')" title="Resend">↺ Resend</button>`:''}
         <button class="btn btn-ghost btn-sm" style="color:var(--accent)" onclick="deleteEmailLog('${e.id}')">✕</button>
       </td>
     </tr>`;
   }).join('') : '<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">✉</div><div class="empty-text">No emails yet</div></div></td></tr>';
+}
+
+function viewEmailLog(id){
+  const e = (state.emailLog||[]).find(x=>x.id===id);
+  if(!e) return;
+
+  const s = state.settings;
+  const fromAddr = s.email || 'finance@sofire-it.co.za';
+  const fromName = s.owner || s.company || 'Sofire-IT Support';
+
+  // Populate meta
+  document.getElementById('evm-from').textContent    = `${fromName} <${fromAddr}>`;
+  document.getElementById('evm-to').textContent      = e.toName ? `${e.toName} <${e.to}>` : e.to;
+  document.getElementById('evm-subject').textContent = e.subject || '—';
+  document.getElementById('evm-body').textContent    = e.body || '(No message body stored — only emails sent after this update are saved)';
+
+  // Date
+  const d = new Date(e.ts);
+  document.getElementById('evm-date').textContent =
+    d.toLocaleDateString('en-ZA',{day:'numeric',month:'long',year:'numeric'}) + ' at ' +
+    d.toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit'});
+
+  // Status
+  const statusEl = document.getElementById('evm-status');
+  statusEl.textContent = e.status === 'sent' ? '✓ Sent' : '✗ Failed';
+  statusEl.style.color = e.status === 'sent' ? 'var(--green)' : 'var(--accent)';
+
+  // CC row
+  const ccRow = document.getElementById('evm-cc-row');
+  if(e.cc){ document.getElementById('evm-cc').textContent=e.cc; ccRow.style.display='contents'; }
+  else ccRow.style.display='none';
+
+  // BCC row
+  const bccRow = document.getElementById('evm-bcc-row');
+  if(e.bcc){ document.getElementById('evm-bcc').textContent=e.bcc; bccRow.style.display='contents'; }
+  else bccRow.style.display='none';
+
+  // Tags
+  const TYPE_LABELS = {invoice:'Invoice',reminder:'Reminder',overdue:'Overdue Notice',other:'Other'};
+  const TYPE_COLORS = {invoice:'var(--green)',reminder:'var(--yellow)',overdue:'var(--accent)',other:'var(--text2)'};
+  const tagsEl = document.getElementById('evm-tags');
+  tagsEl.innerHTML = '';
+  // Type badge
+  const typeBadge = document.createElement('span');
+  typeBadge.className = 'badge';
+  typeBadge.style.cssText = `background:${TYPE_COLORS[e.type]||'var(--text2)'}22;color:${TYPE_COLORS[e.type]||'var(--text2)'}`;
+  typeBadge.textContent = TYPE_LABELS[e.type]||e.type;
+  tagsEl.appendChild(typeBadge);
+  // Invoice badge
+  if(e.invoiceNum){
+    const invBadge = document.createElement('span');
+    invBadge.className = 'badge badge-draft';
+    invBadge.style.cursor = 'pointer'; invBadge.style.fontFamily = 'monospace';
+    invBadge.textContent = e.invoiceNum;
+    invBadge.title = 'Click to view invoice';
+    if(e.invoiceId) invBadge.onclick = ()=>{ closeModal('email-view-modal'); viewInvoice(e.invoiceId); };
+    tagsEl.appendChild(invBadge);
+  }
+
+  // Footer action buttons
+  const resendBtn = document.getElementById('evm-resend-btn');
+  const remBtn    = document.getElementById('evm-reminder-btn');
+  if(resendBtn){ resendBtn.style.display = e.invoiceId ? '' : 'none'; if(e.invoiceId) resendBtn.onclick=()=>{ closeModal('email-view-modal'); quickSend(e.invoiceId); }; }
+  if(remBtn){    remBtn.style.display    = e.invoiceId ? '' : 'none'; if(e.invoiceId) remBtn.onclick=()=>{ closeModal('email-view-modal'); sendOverdueReminder(e.invoiceId); }; }
+
+  openModal('email-view-modal');
 }
 
 function deleteEmailLog(id){
@@ -5855,6 +5976,7 @@ async function sendReminder(){
     const result = await resp.json();
     if(resp.ok && result.success){
       logEmail({ type: emailType, to, toName: inv?.custName||'', subject,
+        body: message,
         invoiceId: inv?.id||null, invoiceNum: inv?.number||null, status:'sent' });
       toast('Reminder sent ✓','success');
       closeModal('reminder-modal');

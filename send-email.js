@@ -37,7 +37,15 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) };
   }
 
-  const { to, toName, subject, message, htmlBody, attachments, cc, bcc } = body;
+  const { to, toName, subject, message, htmlBody, attachments } = body;
+  // Normalise cc/bcc: accept arrays or comma-separated strings
+  const normAddresses = v => {
+    if (!v) return [];
+    if (Array.isArray(v)) return v.map(e=>e.trim()).filter(Boolean);
+    return String(v).split(',').map(e=>e.trim()).filter(Boolean);
+  };
+  const cc  = normAddresses(body.cc);
+  const bcc = normAddresses(body.bcc);
 
   if (!to || !subject) {
     return {
@@ -102,8 +110,6 @@ exports.handler = async (event) => {
     </div>`;
 
   try {
-    await transporter.verify();
-
     const info = await transporter.sendMail({
       from: SMTP_FROM,
       to: toName ? `"${toName}" <${to}>` : to,
@@ -116,11 +122,11 @@ exports.handler = async (event) => {
       attachments: mailAttachments,
     });
 
-    console.log('Sent:', info.messageId);
+    console.log('Sent:', info.messageId, cc.length ? 'CC:'+cc.join(',') : '', bcc.length ? 'BCC:'+bcc.length+'addr' : '');
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({ success: true, messageId: info.messageId }),
+      body: JSON.stringify({ success: true, messageId: info.messageId, cc, bccCount: bcc.length }),
     };
   } catch (err) {
     console.error('SMTP error:', err.message);
