@@ -2572,8 +2572,8 @@ const DB_ENDPOINT    = (typeof window !== 'undefined' && window.electronAPI?.isD
   ? NETLIFY_SITE + '/.netlify/functions/db'
   : '/.netlify/functions/db';
 const EMAIL_ENDPOINT = (typeof window !== 'undefined' && window.electronAPI?.isDesktop)
-  ? NETLIFY_SITE + EMAIL_ENDPOINT
-  : EMAIL_ENDPOINT;
+  ? NETLIFY_SITE + '/.netlify/functions/send-email'
+  : '/.netlify/functions/send-email';
 
 // Session token stored in localStorage for cross-tab persistence
 function getDbToken()  { return localStorage.getItem('sofire_db_token') || ''; }
