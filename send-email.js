@@ -40,9 +40,9 @@ exports.handler = async (event) => {
   const { to, toName, subject, message, htmlBody, attachments } = body;
   // Normalise cc/bcc: accept arrays or comma-separated strings
   const normAddresses = v => {
-    if (!v) return [];
-    if (Array.isArray(v)) return v.map(e=>e.trim()).filter(Boolean);
-    return String(v).split(',').map(e=>e.trim()).filter(Boolean);
+    if (!v || v === null) return [];
+    if (Array.isArray(v)) return v.map(e=>String(e).trim()).filter(e=>e.length>0);
+    return String(v).split(',').map(e=>e.trim()).filter(e=>e.length>0);
   };
   const cc  = normAddresses(body.cc);
   const bcc = normAddresses(body.bcc);
@@ -108,6 +108,9 @@ exports.handler = async (event) => {
         Sofire-IT Support &middot; finance@sofire-it.co.za &middot; +27 671 371 638
       </div>
     </div>`;
+
+  // Debug log (remove after confirming BCC works)
+  console.log('[send-email] to:', to, '| cc:', JSON.stringify(cc), '| bcc:', JSON.stringify(bcc));
 
   try {
     const info = await transporter.sendMail({

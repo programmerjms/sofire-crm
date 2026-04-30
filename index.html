@@ -4470,6 +4470,14 @@ async function sendViaSMTP() {
   btn.textContent = '⏳ Sending...'; btn.disabled = true;
   const s = state.settings;
   const isExp = state.currentSendType === 'expenses';
+
+  // Read CC/BCC immediately on click — BEFORE any async work
+  // Check checkbox state AND field value
+  const ccChecked  = document.getElementById('send-show-cc')?.checked;
+  const bccChecked = document.getElementById('send-show-bcc')?.checked;
+  const ccRawVal   = ccChecked  ? (document.getElementById('send-cc')?.value  || '').trim() : '';
+  const bccRawVal  = bccChecked ? (document.getElementById('send-bcc')?.value || '').trim() : '';
+
   let attachments = [];
   try {
     if (isExp) {
@@ -4491,15 +4499,13 @@ async function sendViaSMTP() {
         contentType: 'application/pdf'
       });
     }
-    // Collect CC/BCC values (comma-separated, cleaned)
-    const ccRaw  = document.getElementById('send-cc')?.value.trim()  || '';
-    const bccRaw = document.getElementById('send-bcc')?.value.trim() || '';
-    const cc  = ccRaw  ? ccRaw.split(',').map(e=>e.trim()).filter(Boolean)  : [];
-    const bcc = bccRaw ? bccRaw.split(',').map(e=>e.trim()).filter(Boolean) : [];
+    // Use CC/BCC values captured at click time (before async PDF generation)
+    const cc  = ccRawVal  ? ccRawVal.split(',').map(e=>e.trim()).filter(Boolean)  : [];
+    const bcc = bccRawVal ? bccRawVal.split(',').map(e=>e.trim()).filter(Boolean) : [];
     const payload = {
       to, toName, subject, message,
-      cc:  cc.length  ? cc  : undefined,
-      bcc: bcc.length ? bcc : undefined,
+      cc:  cc.length  ? cc  : null,
+      bcc: bcc.length ? bcc : null,
       htmlBody: htmlBody || null,
       attachments
     };
