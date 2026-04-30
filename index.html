@@ -306,7 +306,7 @@ textarea{resize:vertical;min-height:70px}
     </div>
     <div class="logo-text">
       <div class="name" id="sidebar-company-name">Sofire-IT Support</div>
-      <div class="sub">Invoice CRM</div>
+      <div class="sub">Invoice CRM<span id="electron-badge" style="display:none;margin-left:6px;background:rgba(74,158,255,.2);color:var(--blue);font-size:8px;padding:1px 5px;border-radius:3px;vertical-align:middle">DESKTOP</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -2540,6 +2540,27 @@ function returnToAdmin() {
 //   crypto.subtle.digest('SHA-256', new TextEncoder().encode('yourpassword'))
 //     .then(b => console.log([...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')))
 // ============================================================
+//  ELECTRON DESKTOP DETECTION
+// ============================================================
+const IS_ELECTRON = !!(window.electronAPI?.isDesktop);
+
+// If running in Electron, use native toast notifications for important events
+function desktopNotify(title, body) {
+  if (IS_ELECTRON && window.electronAPI?.notify) {
+    window.electronAPI.notify(title, body);
+  }
+}
+
+// Override PDF download to use native save dialog when in Electron
+async function savePDFNative(filename, base64data) {
+  if (IS_ELECTRON && window.electronAPI?.savePDF) {
+    const result = await window.electronAPI.savePDF(filename, base64data);
+    return result;
+  }
+  return null; // fallback to browser download
+}
+
+// ============================================================
 //  SUPABASE CONFIG
 // ============================================================
 const SUPABASE_URL = 'https://gpslxejjpgchmrzriskv.supabase.co';
@@ -2645,6 +2666,13 @@ async function pullFromSupabase() {
     state.settings = { ...state.settings, ...pulled.settings };
   }
   if (pulled.nextInvNum) state.nextInvNum = pulled.nextInvNum;
+  // Save to localStorage and clear stale flags
+  try {
+    const toSave = JSON.parse(JSON.stringify(state));
+    delete toSave._needsSupabasePull;
+    delete toSave._logoutAt;
+    localStorage.setItem(getDataKey(), JSON.stringify(toSave));
+  } catch(e) { try { localStorage.setItem(getDataKey(), JSON.stringify(state)); } catch(e2){} }
   return true;
 }
 
@@ -2753,24 +2781,15 @@ async function doLogin() {
           website:'', address:'', bank:'', accHolder:'', accNum:'', branch:'', accType:'',
           taxNum:'', fyStart:3, bkEmail:'', defaultRefundPolicy:'', defaultClientObligations:'', logoData:null }
       };
-      // Load localStorage cache FIRST — this is the source of truth until Supabase has data
-      load();
-      showApp();
+      // Set pull flag so showApp() pulls fresh Supabase data
+      try {
+        const _key = window.CURRENT_DATA_KEY || 'sofire_crm2';
+        const _existing = JSON.parse(localStorage.getItem(_key) || '{}');
+        localStorage.setItem(_key, JSON.stringify({ ..._existing, _needsSupabasePull: true }));
+      } catch(e) {}
+      load(); // show local cache instantly
+      showApp(); // detects _needsSupabasePull, pulls Supabase in background
       resetBtn();
-      // After display, try to pull from Supabase in background
-      // pullFromSupabase() will NOT overwrite if Supabase is empty
-      pullFromSupabase().then(pulled => {
-        if (pulled) {
-          // Supabase had data — refresh the UI
-          renderDashboard(); updateSidebarBranding(); applyTheme(); updateEmailBadge();
-          toast('✓ Data loaded from Supabase', 'success');
-        } else if (getDbToken()) {
-          // Supabase is empty — show migrate prompt
-          setTimeout(() => {
-            toast('☁ Your data is local only — click Settings → Migrate to Supabase to back it up', 'info');
-          }, 2000);
-        }
-      });
       return;
     } else if (result.success === false) {
       errEl.textContent = result.error || 'Incorrect username or password.';
@@ -2862,6 +2881,18 @@ function doLogout() {
   if (!confirm('Sign out of Sofire-IT CRM?')) return;
   clearSession();
   setDbToken(null);
+  // Clear the stale localStorage cache so next login always pulls fresh from Supabase
+  // (keeps the key but empties it so old data can't show through)
+  try {
+    const key = getDataKey();
+    const existing = JSON.parse(localStorage.getItem(key) || '{}');
+    // Stamp it as cleared so we know to pull fresh on next load
+    localStorage.setItem(key, JSON.stringify({
+      ...existing,
+      _logoutAt: new Date().toISOString(),
+      _needsSupabasePull: true,
+    }));
+  } catch(e) {}
   showLogin();
 }
 
@@ -3015,8 +3046,30 @@ function showApp() {
   applyTheme(_s);
   updateSidebarBranding();
   updateEmailBadge();
-  // Refresh Supabase session validity check in background
-  if(getDbToken()) dbCall('auth.verify').then(r=>{ if(!r.valid){ setDbToken(null); console.log('Session expired'); } });  // re-run after load() so tenant's own settings are used
+  // Check if we need a fresh Supabase pull (e.g. after logout+login)
+  if(getDbToken()){
+    const raw = localStorage.getItem(getDataKey()) || '{}';
+    let localMeta = {};
+    try { localMeta = JSON.parse(raw); } catch(e){}
+    if(localMeta._needsSupabasePull){
+      // Pull fresh data from Supabase, clear the flag after
+      pullFromSupabase().then(pulled => {
+        if(pulled){
+          // Clear the flag
+          try {
+            const d = JSON.parse(localStorage.getItem(getDataKey())||'{}');
+            delete d._needsSupabasePull; delete d._logoutAt;
+            localStorage.setItem(getDataKey(), JSON.stringify(d));
+          } catch(e){}
+          renderDashboard(); updateSidebarBranding(); applyTheme(); updateEmailBadge();
+          toast('✓ Data refreshed from Supabase', 'success');
+        }
+      });
+    } else {
+      // Regular session verify
+      dbCall('auth.verify').then(r=>{ if(!r.valid){ setDbToken(null); } });
+    }
+  }
   applyRoleRestrictions();
   renderDashboard();
 }
@@ -3715,11 +3768,16 @@ function removeLogo(){
 //  DASHBOARD
 // ============================================================
 function renderDashboard(){
-  // Silently update overdue statuses on every dashboard load
-  const _today=new Date();_today.setHours(0,0,0,0);
-  let _changed=false;
-  state.invoices.forEach(inv=>{if(inv.status==='pending'&&inv.due&&new Date(inv.due+'T00:00:00')<_today){inv.status='overdue';_changed=true;}});
-  if(_changed)save();
+  // Only auto-mark overdue if we have fresh data (not stale local)
+  // Check if local data has the pull flag set (meaning it's stale)
+  let _isStale = false;
+  try { const d=JSON.parse(localStorage.getItem(getDataKey())||'{}'); _isStale=!!d._needsSupabasePull; } catch(e){}
+  if(!_isStale){
+    const _today=new Date();_today.setHours(0,0,0,0);
+    let _changed=false;
+    state.invoices.forEach(inv=>{if(inv.status==='pending'&&inv.due&&new Date(inv.due+'T00:00:00')<_today){inv.status='overdue';_changed=true;}});
+    if(_changed)save();
+  }
   const s=state.settings;
   const fyVal=document.getElementById('dash-fy-select')?.value||'all';
   const fmt=v=>'R'+Math.abs(parseFloat(v||0)).toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -5799,6 +5857,8 @@ function toast(msg,type='success'){
   const c=document.getElementById('toast-container');
   const t=document.createElement('div');t.className=`toast ${type}`;t.textContent=msg;
   c.appendChild(t);setTimeout(()=>t.remove(),3500);
+  // Desktop notification in Electron for important events
+  if(IS_ELECTRON && (type==='success'||type==='error')) desktopNotify(type==='success'?'✓ Sofire-IT CRM':'⚠ Sofire-IT CRM', msg);
 }
 
 // ============================================================
@@ -6434,6 +6494,8 @@ applyTheme();
 updateSidebarBranding();
 updatePreview();
 renderDashboard();
+// Show desktop badge if running in Electron
+if(IS_ELECTRON){ const b=document.getElementById('electron-badge'); if(b) b.style.display='inline'; }
 </script>
 </body>
 </html>
