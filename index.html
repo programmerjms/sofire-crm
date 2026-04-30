@@ -2814,19 +2814,42 @@ function doLogout() {
 }
 
 async function migrateToSupabase() {
-  if (!getDbToken()) {
-    toast('Sign in first — Supabase migration requires an active session', 'error'); return;
-  }
-  if (!confirm('This will push all your current local data to Supabase cloud storage.\n\nYour local data is kept — this just copies it up.\n\nContinue?')) return;
-
   const btn = document.getElementById('migrate-btn');
+
+  // If no DB token yet, authenticate first using current local credentials
+  if (!getDbToken()) {
+    // Ask for password to authenticate with Supabase
+    const pw = prompt('Enter your CRM password to connect to Supabase and migrate your data:');
+    if (!pw) return;
+
+    if(btn){ btn.textContent='☁ Connecting...'; btn.disabled=true; }
+    const hash = await sha256(pw);
+    const sess = getSession();
+    const username = sess?.username || 'juan';
+
+    const authResult = await dbCall('auth.login', { username, passwordHash: hash }, '');
+    if (!authResult.success || !authResult.token) {
+      toast('Could not authenticate with Supabase: ' + (authResult.error || 'Check your password and make sure db.js is deployed'), 'error');
+      if(btn){ btn.textContent='☁ Migrate to Supabase'; btn.disabled=false; }
+      return;
+    }
+    setDbToken(authResult.token);
+    toast('✓ Connected to Supabase', 'success');
+  }
+
+  if (!confirm('This will push all your current local data to Supabase cloud storage.\n\nYour local data is kept — this just copies it up.\n\nContinue?')) {
+    if(btn){ btn.textContent='☁ Migrate to Supabase'; btn.disabled=false; }
+    return;
+  }
+
   if(btn){ btn.textContent='☁ Migrating...'; btn.disabled=true; }
 
   try {
     const result = await dbCall('sync.push', { state });
     if (result.success) {
-      toast(`✓ Migrated to Supabase — ${result.pushed.invoices} invoices, ${result.pushed.customers} customers, ${result.pushed.payments} payments, ${result.pushed.expenses} expenses`, 'success');
-      if(btn){ btn.textContent='✓ Migrated'; btn.style.color='var(--green)'; }
+      const p = result.pushed;
+      toast(`✓ Migrated — ${p.invoices||0} invoices, ${p.customers||0} customers, ${p.payments||0} payments, ${p.expenses||0} expenses`, 'success');
+      if(btn){ btn.textContent='✓ Migrated to Supabase'; btn.style.color='var(--green)'; btn.disabled=false; }
     } else {
       toast('Migration failed: ' + (result.error||'Unknown error'), 'error');
       if(btn){ btn.textContent='☁ Migrate to Supabase'; btn.disabled=false; }
