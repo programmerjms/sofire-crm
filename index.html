@@ -719,7 +719,7 @@ textarea{resize:vertical;min-height:70px}
   <div id="pay-tax-panel" class="card" style="margin-bottom:20px;display:none">
     <div class="card-header">
       <span class="card-title">🇿🇦 SARS Tax Calculation — <span id="pay-tax-fy-label">FY</span></span>
-      <span style="font-size:11px;color:var(--text3)">Based on 2025/2026 tax brackets</span>
+      <span style="font-size:11px;color:var(--text3)">Based on 2027 tax year brackets (Mar 2026–Feb 2027)</span>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;padding:0">
       <!-- Col 1: Income -->
@@ -888,7 +888,7 @@ textarea{resize:vertical;min-height:70px}
         </div>
       </div>
     </div>
-    <div style="padding:0 18px 14px;font-size:11px;color:var(--text3)">⚠ Estimates based on 2025/2026 SARS individual tax brackets. Consult your bookkeeper for official returns.</div>
+    <div style="padding:0 18px 14px;font-size:11px;color:var(--text3)">⚠ Estimates based on 2027 SARS individual tax brackets (1 Mar 2026 – 28 Feb 2027). Consult your bookkeeper for official returns.</div>
   </div>
 
   <!-- Expenses Table -->
@@ -1727,7 +1727,7 @@ textarea{resize:vertical;min-height:70px}
 
             </div>
             <div style="padding:8px 16px 10px;font-size:10px;color:var(--text3);border-top:1px solid var(--border)">
-              ⚠ Estimates only — 2025/2026 SARS individual tax brackets. Consult your tax practitioner for official submissions.
+              ⚠ Estimates only — 2027 SARS individual tax brackets (1 Mar 2026 – 28 Feb 2027). Consult your tax practitioner for official submissions.
             </div>
           </div>
         </div>
@@ -3824,25 +3824,25 @@ function selectDashFY(fy){
 
 // SARS 2025/2026 tax brackets (individual)
 function calcSARSTax(income){
-  // SARS 2025/2026 individual tax brackets
-  // Format: [upper limit, base tax at bottom of this band, marginal rate]
-  // Base values are cumulative tax on income exactly at the lower limit of each band
+  // SARS 2027 tax year (1 March 2026 – 28 February 2027)
+  // Updated 25 February 2026 — source: sars.gov.za/tax-rates/income-tax/rates-of-tax-for-individuals/
+  // Format: [upper limit, base tax at lower limit of band, marginal rate]
   if(income<=0) return 0;
   const brackets=[
-    [237100,       0,      0.18],  // 18% from R1
-    [370500,   42678,      0.26],  // R42,678 + 26% above R237,100
-    [512800,   77362,      0.31],  // R77,362 + 31% above R370,500
-    [673000,  121475,      0.36],  // R121,475 + 36% above R512,800
-    [857900,  179147,      0.39],  // R179,147 + 39% above R673,000
-    [1817000, 251258,      0.41],  // R251,258 + 41% above R857,900
-    [Infinity,644489,      0.45],  // R644,489 + 45% above R1,817,000
+    [245100,       0,      0.18],  // 18% of taxable income
+    [383100,   44118,      0.26],  // R44,118 + 26% above R245,100
+    [530200,   79998,      0.31],  // R79,998 + 31% above R383,100
+    [695800,  125599,      0.36],  // R125,599 + 36% above R530,200
+    [887000,  185215,      0.39],  // R185,215 + 39% above R695,800
+    [1878600, 259783,      0.41],  // R259,783 + 41% above R887,000
+    [Infinity,666339,      0.45],  // R666,339 + 45% above R1,878,600
   ];
   let prev=0, tax=0;
   for(const [limit,base,rate] of brackets){
     if(income<=limit){tax=base+(income-prev)*rate; break;}
     prev=limit;
   }
-  const primaryRebate=17235; // 2025/2026 primary rebate
+  const primaryRebate=17235; // 2027 primary rebate (unchanged from 2026)
   return Math.max(0, tax-primaryRebate);
 }
 
@@ -4798,13 +4798,13 @@ function inFY(dateStr, fyYear){
 
 // Get which SARS tax bracket applies
 function taxBracketLabel(income){
-  if(income<=237100)  return '18% bracket (R0 – R237 100)';
-  if(income<=370500)  return '26% bracket (R237 101 – R370 500)';
-  if(income<=512800)  return '31% bracket (R370 501 – R512 800)';
-  if(income<=673000)  return '36% bracket (R512 801 – R673 000)';
-  if(income<=857900)  return '39% bracket (R673 001 – R857 900)';
-  if(income<=1817000) return '41% bracket (R857 901 – R1 817 000)';
-  return '45% bracket (R1 817 001+)';
+  if(income<=245100)  return '18% bracket (R1 – R245 100)';
+  if(income<=383100)  return '26% bracket (R245 101 – R383 100)';
+  if(income<=530200)  return '31% bracket (R383 101 – R530 200)';
+  if(income<=695800)  return '36% bracket (R530 201 – R695 800)';
+  if(income<=887000)  return '39% bracket (R695 801 – R887 000)';
+  if(income<=1878600) return '41% bracket (R887 001 – R1 878 600)';
+  return '45% bracket (R1 878 601+)';
 }
 
 function renderPayments(){
@@ -4847,7 +4847,7 @@ function renderPayments(){
       const totalExp=fyExps.reduce((a,e)=>a+parseFloat(e.amount||0),0);
       const taxable=Math.max(0,grossTotal-totalExp);
       const grossTax=calcSARSTax(taxable);
-      const primaryRebate=17235;
+      const primaryRebate=17235; // 2027 tax year
       const taxAfterRebate=Math.max(0,grossTax-primaryRebate);
       const taxOwed=Math.max(0,taxAfterRebate-payeTotal);
       const effRate=grossTotal>0?((taxAfterRebate/grossTotal)*100):0;
