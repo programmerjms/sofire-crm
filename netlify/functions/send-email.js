@@ -38,12 +38,31 @@ exports.handler = async (event) => {
   }
 
   const { to, toName, subject, message, htmlBody, attachments } = body;
+  // Normalise cc/bcc: accept arrays or comma-separated strings
+  const normAddresses = v => {
+    if (!v || v === null) return [];
+    if (Array.isArray(v)) return v.map(e=>String(e).trim()).filter(e=>e.length>0);
+    return String(v).split(',').map(e=>e.trim()).filter(e=>e.length>0);
+  };
+  const cc  = normAddresses(body.cc);
+  const bcc = normAddresses(body.bcc);
 
   if (!to || !subject) {
     return {
       statusCode: 400,
       body: JSON.stringify({ error: 'Missing required fields: to, subject' }),
     };
+  }
+
+  // Validate CC/BCC email addresses if provided
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (cc && cc.length) {
+    const invalid = cc.filter(e => !emailRegex.test(e));
+    if (invalid.length) return { statusCode: 400, body: JSON.stringify({ error: `Invalid CC address(es): ${invalid.join(', ')}` }) };
+  }
+  if (bcc && bcc.length) {
+    const invalid = bcc.filter(e => !emailRegex.test(e));
+    if (invalid.length) return { statusCode: 400, body: JSON.stringify({ error: `Invalid BCC address(es): ${invalid.join(', ')}` }) };
   }
 
   const SMTP_HOST = process.env.SMTP_HOST || 'mail.sofire-it.co.za';
@@ -90,12 +109,15 @@ exports.handler = async (event) => {
       </div>
     </div>`;
 
-  try {
-    await transporter.verify();
+  // Debug log (remove after confirming BCC works)
+  console.log('[send-email] to:', to, '| cc:', JSON.stringify(cc), '| bcc:', JSON.stringify(bcc));
 
+  try {
     const info = await transporter.sendMail({
       from: SMTP_FROM,
       to: toName ? `"${toName}" <${to}>` : to,
+      cc:  cc  && cc.length  ? cc.join(', ')  : undefined,
+      bcc: bcc && bcc.length ? bcc.join(', ') : undefined,
       replyTo: SMTP_FROM,
       subject,
       text: message || '',
@@ -103,11 +125,11 @@ exports.handler = async (event) => {
       attachments: mailAttachments,
     });
 
-    console.log('Sent:', info.messageId);
+    console.log('Sent:', info.messageId, cc.length ? 'CC:'+cc.join(',') : '', bcc.length ? 'BCC:'+bcc.length+'addr' : '');
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({ success: true, messageId: info.messageId }),
+      body: JSON.stringify({ success: true, messageId: info.messageId, cc, bccCount: bcc.length }),
     };
   } catch (err) {
     console.error('SMTP error:', err.message);
