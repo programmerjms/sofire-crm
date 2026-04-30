@@ -320,6 +320,7 @@ textarea{resize:vertical;min-height:70px}
     <div class="nav-section">Business</div>
     <div class="nav-item" data-page="expenses"><span class="nav-icon">◐</span> Expenses</div>
     <div class="nav-item" data-page="customers"><span class="nav-icon">◑</span> Customers</div>
+    <div class="nav-item" data-page="emails" id="nav-emails"><span class="nav-icon">✉</span> Emails <span id="email-badge" style="display:none;background:var(--accent);color:#fff;font-size:9px;padding:1px 6px;border-radius:8px;margin-left:4px;font-family:'DM Mono',monospace">0</span></div>
     <div class="nav-item" data-page="settings"><span class="nav-icon">⚙</span> Settings</div>
     <div class="nav-item" data-page="controlpanel" id="nav-controlpanel" style="display:none"><span class="nav-icon">👑</span> Control Panel</div>
   </nav>
@@ -508,6 +509,37 @@ textarea{resize:vertical;min-height:70px}
           <div style="font-size:10px;color:var(--text3);margin-top:6px">💡 Tip: Use <code style="background:var(--surface3);padding:1px 4px;border-radius:3px">Main Title | Sub description</code> to add an orange subtitle line (e.g. <em>Website Maintenance | Content Updates, Plugins and Theme Updates</em>)</div>
         </div>
         <div class="builder-section">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div class="section-title" style="margin-bottom:0">Discount</div>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;color:var(--text2)">
+              <input type="checkbox" id="inv-discount-enabled" onchange="toggleDiscount(this.checked)" style="accent-color:var(--accent)">
+              Apply a discount
+            </label>
+          </div>
+          <div id="inv-discount-block" style="display:none">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;align-items:end">
+              <div class="form-group" style="margin-bottom:0">
+                <label>Discount Type</label>
+                <select id="inv-discount-type" onchange="updatePreview()">
+                  <option value="percent">Percentage (%)</option>
+                  <option value="amount">Fixed Amount (R)</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label id="inv-discount-value-label">Discount %</label>
+                <input type="number" id="inv-discount-value" min="0" step="0.01" placeholder="0"
+                  oninput="updatePreview()" style="font-size:15px;font-weight:600">
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label>Discount Label (optional)</label>
+                <input type="text" id="inv-discount-label" placeholder="e.g. Loyalty Discount"
+                  oninput="updatePreview()">
+              </div>
+            </div>
+            <div id="inv-discount-summary" style="margin-top:10px;padding:9px 13px;background:var(--surface2);border-radius:7px;font-size:12px;color:var(--green);font-family:'DM Mono',monospace;display:none"></div>
+          </div>
+        </div>
+        <div class="builder-section">
           <div class="section-title">Notes / Payment Terms</div>
           <textarea id="inv-notes" placeholder="e.g. Payment due within 30 days. Thank you for your business!" oninput="updatePreview()"></textarea>
         </div>
@@ -591,7 +623,10 @@ textarea{resize:vertical;min-height:70px}
                 <td colspan="3" style="text-align:right;color:#555">Subtotal</td>
                 <td style="text-align:right;font-weight:600" id="p-subtotal">R0.00</td>
               </tr>
-
+              <tr id="p-discount-row" style="display:none">
+                <td colspan="3" style="text-align:right;color:#e05c00;font-size:11px" id="p-discount-label">Discount</td>
+                <td style="text-align:right;font-weight:600;color:#e05c00" id="p-discount-amt">−R0.00</td>
+              </tr>
               <tr class="total-row">
                 <td colspan="3" style="text-align:right;color:#555">Total</td>
                 <td style="text-align:right;font-weight:600" id="p-total-row">R0.00</td>
@@ -887,6 +922,121 @@ textarea{resize:vertical;min-height:70px}
   </div>
   <div class="customers-grid" id="customers-grid">
     <div style="grid-column:1/-1"><div class="empty-state"><div class="empty-icon">👥</div><div class="empty-text">No customers yet</div></div></div>
+  </div>
+</div>
+
+<!-- ===================== EMAILS ===================== -->
+<div class="content page" id="page-emails">
+
+  <!-- Top bar -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="filter-btn active" data-email-filter="all" onclick="filterEmails(this,'all')">All</button>
+      <button class="filter-btn" data-email-filter="invoice" onclick="filterEmails(this,'invoice')">Invoices</button>
+      <button class="filter-btn" data-email-filter="reminder" onclick="filterEmails(this,'reminder')">Reminders</button>
+      <button class="filter-btn" data-email-filter="overdue" onclick="filterEmails(this,'overdue')">Overdue</button>
+      <button class="filter-btn" data-email-filter="other" onclick="filterEmails(this,'other')">Other</button>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost btn-sm" onclick="checkOverdueInvoices()" title="Check all invoices and flag overdue ones">🔍 Check Overdue</button>
+      <button class="btn btn-primary btn-sm" onclick="openReminderWizard()">✉ Send Reminder</button>
+    </div>
+  </div>
+
+  <!-- Overdue alert banner -->
+  <div id="overdue-alert-banner" style="display:none;background:rgba(255,60,60,.08);border:1px solid rgba(255,60,60,.25);border-radius:10px;padding:14px 18px;margin-bottom:18px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-weight:600;color:var(--accent);margin-bottom:4px">⚠ Overdue Invoices Detected</div>
+        <div style="font-size:12px;color:var(--text2)" id="overdue-banner-text">You have overdue invoices that need attention.</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" style="color:var(--accent)" onclick="sendAllOverdueReminders()">Send All Overdue Reminders</button>
+    </div>
+    <div id="overdue-inv-list" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px"></div>
+  </div>
+
+  <!-- Email log table -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Email History</span>
+      <span style="font-size:11px;color:var(--text3)" id="email-count-lbl">0 emails</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Date &amp; Time</th>
+            <th>Type</th>
+            <th>To</th>
+            <th>Subject</th>
+            <th>Invoice</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="email-log-tbody">
+          <tr><td colspan="7"><div class="empty-state"><div class="empty-icon">✉</div><div class="empty-text">No emails sent yet</div></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Reminder Wizard Modal -->
+<div class="modal-overlay" id="reminder-modal">
+  <div class="modal" style="max-width:580px">
+    <div class="modal-header">
+      <div class="modal-title">Send Invoice Reminder</div>
+      <button class="modal-close" onclick="closeModal('reminder-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <!-- Step 1: Select invoice -->
+      <div class="form-group" style="margin-bottom:14px">
+        <label>Invoice</label>
+        <select id="reminder-inv-select" onchange="prefillReminder()">
+          <option value="">— Select Invoice —</option>
+        </select>
+      </div>
+      <div id="reminder-inv-info" style="display:none;background:var(--surface2);border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <div><div style="color:var(--text3);margin-bottom:2px;font-size:10px">CUSTOMER</div><div style="font-weight:500" id="rem-cust">—</div></div>
+          <div><div style="color:var(--text3);margin-bottom:2px;font-size:10px">AMOUNT</div><div style="font-weight:500;color:var(--green)" id="rem-amount">—</div></div>
+          <div><div style="color:var(--text3);margin-bottom:2px;font-size:10px">DUE DATE</div><div style="font-weight:500" id="rem-due">—</div></div>
+        </div>
+        <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
+          <span style="font-size:11px;color:var(--text3)">Status:</span>
+          <span id="rem-status-badge" class="badge">—</span>
+          <span id="rem-days-overdue" style="font-size:11px;color:var(--accent)"></span>
+        </div>
+      </div>
+      <!-- Reminder type -->
+      <div class="form-group" style="margin-bottom:14px">
+        <label>Reminder Type</label>
+        <select id="reminder-type" onchange="updateReminderTemplate()">
+          <option value="due_soon">📅 Due Soon — Invoice due in a few days</option>
+          <option value="due_today">⏰ Due Today — Invoice due today</option>
+          <option value="overdue_first">⚠ First Overdue Notice</option>
+          <option value="overdue_final">🔴 Final Overdue Notice</option>
+          <option value="custom">✏ Custom Message</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label>To Email</label>
+        <input type="email" id="reminder-to" placeholder="client@email.com">
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label>Subject</label>
+        <input type="text" id="reminder-subject">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label>Message</label>
+        <textarea id="reminder-message" style="min-height:160px"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('reminder-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="sendReminder()">✉ Send Reminder</button>
+    </div>
   </div>
 </div>
 
@@ -2476,7 +2626,7 @@ async function doLogin() {
       role: 'admin', tenantId: tenant.id, tenantName: tenant.company }, true);
     // Reset state completely — prevents admin data from bleeding into tenant view
     state = {
-      invoices:[], customers:[], payments:[], expenses:[], taxPayments:[],
+      invoices:[], customers:[], payments:[], expenses:[], taxPayments:[], emailLog:[],
       nextInvNum: 202600001, editingId:null, editingExpId:null, editingCustId:null,
       currentSendInvId:null, currentSendType:null,
       settings:{
@@ -2568,7 +2718,8 @@ function showApp() {
   const _co = _s.company ? _s.company.split('(')[0].trim() : (_sess?.tenantName||'Invoice CRM');
   document.title = _co + ' — CRM';
   applyTheme(_s);
-  updateSidebarBranding();  // re-run after load() so tenant's own settings are used
+  updateSidebarBranding();
+  updateEmailBadge();  // re-run after load() so tenant's own settings are used
   applyRoleRestrictions();
   renderDashboard();
 }
@@ -2888,6 +3039,7 @@ function nav(page){
   }
   if(page==='customers')renderCustomers();
   if(page==='settings')loadSettings();
+  if(page==='emails'){renderEmailLog();checkOverdueInvoices(false);}
   if(page==='controlpanel'){if(canControlPanel())renderControlPanel();else{nav('dashboard');toast('Access denied','error');}}
   if(page==='create'&&!state.editingId)initCreate();
 }
@@ -3263,6 +3415,11 @@ function removeLogo(){
 //  DASHBOARD
 // ============================================================
 function renderDashboard(){
+  // Silently update overdue statuses on every dashboard load
+  const _today=new Date();_today.setHours(0,0,0,0);
+  let _changed=false;
+  state.invoices.forEach(inv=>{if(inv.status==='pending'&&inv.due&&new Date(inv.due+'T00:00:00')<_today){inv.status='overdue';_changed=true;}});
+  if(_changed)save();
   const s=state.settings;
   const fyVal=document.getElementById('dash-fy-select')?.value||'all';
   const fmt=v=>'R'+Math.abs(parseFloat(v||0)).toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -3500,6 +3657,12 @@ function initCreate(){
   document.getElementById('inv-refund-policy').value=s0.defaultRefundPolicy||'';
   document.getElementById('inv-client-obligations').value=s0.defaultClientObligations||'';
   document.getElementById('line-items').innerHTML='';lineItemCount=0;addLineItem();
+  // Reset discount for new invoice
+  const dc=document.getElementById('inv-discount-enabled');
+  if(dc){dc.checked=false;toggleDiscount(false);}
+  const dv=document.getElementById('inv-discount-value');if(dv)dv.value='';
+  const dl=document.getElementById('inv-discount-label');if(dl)dl.value='';
+  const dt=document.getElementById('inv-discount-type');if(dt)dt.value='percent';
   populateCustomerSelect();updatePreview();
 }
 function populateCustomerSelect(){
@@ -3550,6 +3713,34 @@ function fmtDate(d){
   if(!d)return'—';
   try{const dt=new Date(d+'T00:00:00');return dt.toLocaleDateString('en-ZA',{day:'numeric',month:'short',year:'numeric'});}catch(e){return d;}
 }
+// ── Discount helpers
+function toggleDiscount(enabled) {
+  const block = document.getElementById('inv-discount-block');
+  if (block) block.style.display = enabled ? '' : 'none';
+  if (!enabled) {
+    const row = document.getElementById('p-discount-row');
+    if (row) row.style.display = 'none';
+  }
+  updatePreview();
+}
+
+function getDiscountInfo() {
+  const enabled = document.getElementById('inv-discount-enabled')?.checked;
+  if (!enabled) return { enabled: false, type: 'percent', value: 0, label: '', amount: 0 };
+  const type  = document.getElementById('inv-discount-type')?.value || 'percent';
+  const value = parseFloat(document.getElementById('inv-discount-value')?.value || 0);
+  const label = document.getElementById('inv-discount-label')?.value || '';
+  return { enabled, type, value, label, amount: 0 }; // amount calculated from subtotal
+}
+
+function calcDiscount(subtotal, discount) {
+  if (!discount.enabled || !discount.value) return 0;
+  if (discount.type === 'percent') {
+    return Math.min(subtotal, subtotal * (discount.value / 100));
+  }
+  return Math.min(subtotal, discount.value);
+}
+
 function updatePreview(){
   const s=state.settings;
   const num=document.getElementById('inv-number')?.value||'';
@@ -3662,12 +3853,47 @@ function updatePreview(){
       :'<tr><td colspan="4" style="color:#bbb;font-size:10px;padding:14px 10px">No items added yet</td></tr>';
   }
 
-  // Totals
-  const subtotal=items.reduce((a,i)=>a+i.amount,0);
-    const fmtR=v=>'R'+v.toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
-  document.getElementById('p-subtotal').textContent=fmtR(subtotal);
-  document.getElementById('p-total-row').textContent=fmtR(subtotal);
-  document.getElementById('p-total').textContent=fmtR(subtotal);
+  // Totals with discount
+  const subtotal = items.reduce((a,i) => a+i.amount, 0);
+  const fmtR = v => 'R'+Math.abs(v).toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const discount = getDiscountInfo();
+  const discountAmt = calcDiscount(subtotal, discount);
+  const total = Math.max(0, subtotal - discountAmt);
+
+  // Update discount type label
+  const dvLabel = document.getElementById('inv-discount-value-label');
+  if (dvLabel) dvLabel.textContent = discount.type === 'percent' ? 'Discount %' : 'Discount Amount (R)';
+
+  // Discount summary badge
+  const dSummary = document.getElementById('inv-discount-summary');
+  if (dSummary) {
+    if (discount.enabled && discount.value > 0) {
+      const pct = discount.type === 'percent' ? discount.value + '%' : ((discountAmt/subtotal)*100).toFixed(1)+'%';
+      dSummary.style.display = 'block';
+      dSummary.textContent = `Discount: −${fmtR(discountAmt)} (${pct} off subtotal of ${fmtR(subtotal)}) → Total: ${fmtR(total)}`;
+    } else {
+      dSummary.style.display = 'none';
+    }
+  }
+
+  // Show/hide discount row in preview
+  const discRow = document.getElementById('p-discount-row');
+  const discLbl = document.getElementById('p-discount-label');
+  const discAmt = document.getElementById('p-discount-amt');
+  if (discRow) {
+    if (discount.enabled && discountAmt > 0) {
+      discRow.style.display = '';
+      const pct = discount.type === 'percent' ? ` (${discount.value}%)` : '';
+      if (discLbl) discLbl.textContent = (discount.label || 'Discount') + pct;
+      if (discAmt) discAmt.textContent = '−' + fmtR(discountAmt);
+    } else {
+      discRow.style.display = 'none';
+    }
+  }
+
+  document.getElementById('p-subtotal').textContent = fmtR(subtotal);
+  document.getElementById('p-total-row').textContent = discountAmt > 0 ? fmtR(total) : fmtR(subtotal);
+  document.getElementById('p-total').textContent = fmtR(total);
 
   // Terms & Policies — live update in preview
   const refund=document.getElementById('inv-refund-policy')?.value||'';
@@ -3684,7 +3910,9 @@ function collectInvoiceData(status){
   const s=state.settings;
   const items=getLineItems();
   const subtotal=items.reduce((a,i)=>a+i.amount,0);
-  const total=subtotal;
+  const discount=getDiscountInfo();
+  const discountAmt=calcDiscount(subtotal,discount);
+  const total=Math.max(0,subtotal-discountAmt);
   return{
     id:state.editingId||Date.now().toString(),
     number:document.getElementById('inv-number').value,
@@ -3696,7 +3924,13 @@ function collectInvoiceData(status){
     custEmail:document.getElementById('inv-cust-email').value,
     custAddr:document.getElementById('inv-cust-addr').value,
     notes:document.getElementById('inv-notes').value,
-    items,subtotal,total,
+    items, subtotal,
+    discountEnabled: discount.enabled,
+    discountType:    discount.type,
+    discountValue:   discount.value,
+    discountLabel:   discount.label,
+    discountAmt,
+    total,
     refundPolicy:document.getElementById('inv-refund-policy').value,
     clientObligations:document.getElementById('inv-client-obligations').value
   };
@@ -3729,6 +3963,20 @@ function editInvoice(id){
     document.getElementById('inv-notes').value=inv.notes||'';
     document.getElementById('inv-refund-policy').value=inv.refundPolicy||state.settings.defaultRefundPolicy||'';
     document.getElementById('inv-client-obligations').value=inv.clientObligations||state.settings.defaultClientObligations||'';
+    // Load discount settings
+    const discChk = document.getElementById('inv-discount-enabled');
+    if (discChk) {
+      discChk.checked = !!inv.discountEnabled;
+      toggleDiscount(!!inv.discountEnabled);
+      if (inv.discountEnabled) {
+        const dt = document.getElementById('inv-discount-type');
+        const dv = document.getElementById('inv-discount-value');
+        const dl = document.getElementById('inv-discount-label');
+        if (dt) dt.value = inv.discountType || 'percent';
+        if (dv) dv.value = inv.discountValue || '';
+        if (dl) dl.value = inv.discountLabel || '';
+      }
+    }
     document.getElementById('line-items').innerHTML='';lineItemCount=0;
     (inv.items||[]).forEach(it=>addLineItem(it.desc,it.price,it.qty));
     updatePreview();
@@ -3851,9 +4099,9 @@ function buildInvoiceHTML(inv,s){
       </thead>
       <tbody>${itemRows||'<tr><td colspan="4" style="padding:12px 10px;color:#bbb;font-size:10px">No items</td></tr>'}</tbody>
       <tfoot>
-        <tr><td colspan="3" style="padding:8px 10px;text-align:right;color:#555;font-size:11px">Subtotal</td><td style="padding:8px 10px;text-align:right;font-weight:600">${fmtR(subtotal)}</td></tr>
-
-        <tr><td colspan="3" style="padding:8px 10px;text-align:right;color:#555;font-size:11px">Total</td><td style="padding:8px 10px;text-align:right;font-weight:600">${fmtR(total)}</td></tr>
+        ${inv.discountAmt>0?`<tr><td colspan="3" style="padding:8px 10px;text-align:right;color:#555;font-size:11px">Subtotal</td><td style="padding:8px 10px;text-align:right;font-weight:600">${fmtR(subtotal)}</td></tr>`:''}
+        ${inv.discountAmt>0?`<tr><td colspan="3" style="padding:8px 10px;text-align:right;color:#e05c00;font-size:11px">${inv.discountLabel||'Discount'}${inv.discountType==='percent'?` (${inv.discountValue}%)`:''}</td><td style="padding:8px 10px;text-align:right;font-weight:600;color:#e05c00">−${fmtR(inv.discountAmt)}</td></tr>`:''}
+        <tr><td colspan="3" style="padding:8px 10px;text-align:right;color:#555;font-size:11px">${inv.discountAmt>0?'After Discount':'Subtotal'}</td><td style="padding:8px 10px;text-align:right;font-weight:600">${fmtR(total)}</td></tr>
         <tr style="border-top:2px solid ${invColor}">
           <td colspan="3" style="padding:14px 10px;font-size:13px;font-weight:800;color:${invColor}"><strong>Amount Due</strong></td>
           <td style="padding:14px 10px;font-size:14px;font-weight:800;color:${invColor};text-align:right"><strong>${fmtR(total)}</strong></td>
@@ -4167,10 +4415,25 @@ async function sendViaSMTP() {
     if (resp.ok && result.success) {
       setSendStatus('✓ Email sent successfully!', true);
       toast('Email sent ✓', 'success');
+      // Log the email
+      const logInv = !isExp && state.currentSendInvId && state.currentSendInvId !== 'unsaved'
+        ? state.invoices.find(i => i.id === state.currentSendInvId) : null;
+      logEmail({
+        type: isExp ? 'other' : 'invoice',
+        to, toName,
+        subject,
+        invoiceId:   logInv?.id || null,
+        invoiceNum:  logInv?.number || null,
+        status: 'sent'
+      });
       // Mark invoice as sent
       if (!isExp && state.currentSendInvId && state.currentSendInvId !== 'unsaved') {
         const inv = state.invoices.find(i => i.id === state.currentSendInvId);
-        if (inv && inv.status === 'draft') { inv.status = 'pending'; save(); }
+        if (inv) {
+          if (inv.status === 'draft') inv.status = 'pending';
+          inv.lastEmailSent = new Date().toISOString();
+          save();
+        }
       }
       setTimeout(() => closeModal('send-modal'), 1800);
     } else {
@@ -5210,6 +5473,377 @@ function resetTermsToDefault(){
   document.getElementById('inv-client-obligations').value=s.defaultClientObligations||'';
   updatePreview();
   toast('Terms reset to defaults','success');
+}
+
+// ============================================================
+//  EMAIL LOG & REMINDER SYSTEM
+// ============================================================
+
+function logEmail(opts){
+  if(!state.emailLog) state.emailLog=[];
+  state.emailLog.unshift({
+    id: Date.now().toString(),
+    ts: new Date().toISOString(),
+    type:       opts.type       || 'other',
+    to:         opts.to         || '',
+    toName:     opts.toName     || '',
+    subject:    opts.subject    || '',
+    invoiceId:  opts.invoiceId  || null,
+    invoiceNum: opts.invoiceNum || null,
+    status:     opts.status     || 'sent',
+    note:       opts.note       || ''
+  });
+  // Keep last 500 emails
+  if(state.emailLog.length > 500) state.emailLog = state.emailLog.slice(0,500);
+  save();
+  updateEmailBadge();
+}
+
+function updateEmailBadge(){
+  const badge = document.getElementById('email-badge');
+  const count = (state.emailLog||[]).length;
+  if(badge){
+    badge.style.display = count > 0 ? 'inline' : 'none';
+    badge.textContent   = count > 99 ? '99+' : count;
+  }
+}
+
+let emailFilter = 'all';
+function filterEmails(btn, filter){
+  document.querySelectorAll('[data-email-filter]').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  emailFilter = filter;
+  renderEmailLog();
+}
+
+function renderEmailLog(){
+  updateEmailBadge();
+  const log = state.emailLog || [];
+  const filtered = emailFilter === 'all' ? log : log.filter(e=>e.type===emailFilter);
+  const lbl = document.getElementById('email-count-lbl');
+  if(lbl) lbl.textContent = filtered.length + ' email' + (filtered.length!==1?'s':'');
+
+  const tbody = document.getElementById('email-log-tbody');
+  if(!tbody) return;
+
+  const TYPE_LABELS = {
+    invoice:  {text:'Invoice',  color:'var(--green)'},
+    reminder: {text:'Reminder', color:'var(--yellow)'},
+    overdue:  {text:'Overdue',  color:'var(--accent)'},
+    other:    {text:'Other',    color:'var(--text2)'}
+  };
+
+  tbody.innerHTML = filtered.length ? filtered.map(e=>{
+    const d = new Date(e.ts);
+    const dateStr = d.toLocaleDateString('en-ZA',{day:'numeric',month:'short',year:'numeric'});
+    const timeStr = d.toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit'});
+    const type = TYPE_LABELS[e.type]||TYPE_LABELS.other;
+    const statusColor = e.status==='sent'?'var(--green)':e.status==='failed'?'var(--accent)':'var(--text3)';
+    return `<tr>
+      <td class="mono" style="color:var(--text2);font-size:11px;white-space:nowrap">${dateStr}<br>${timeStr}</td>
+      <td><span class="badge" style="background:${type.color}22;color:${type.color}">${type.text}</span></td>
+      <td style="font-size:12px">${e.toName||'—'}<br><span style="font-size:10px;color:var(--text3)">${e.to}</span></td>
+      <td style="font-size:12px">${e.subject||'—'}</td>
+      <td style="font-size:11px">${e.invoiceNum?`<span class="mono" style="color:var(--accent)">${e.invoiceNum}</span>`:'—'}</td>
+      <td><span style="color:${statusColor};font-size:11px">${e.status==='sent'?'✓ Sent':e.status==='failed'?'✗ Failed':'—'}</span></td>
+      <td>
+        ${e.invoiceId?`<button class="btn btn-ghost btn-sm" onclick="quickSend('${e.invoiceId}')" title="Resend">↺ Resend</button>`:''}
+        <button class="btn btn-ghost btn-sm" style="color:var(--accent)" onclick="deleteEmailLog('${e.id}')">✕</button>
+      </td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">✉</div><div class="empty-text">No emails yet</div></div></td></tr>';
+}
+
+function deleteEmailLog(id){
+  state.emailLog = (state.emailLog||[]).filter(e=>e.id!==id);
+  save(); renderEmailLog();
+}
+
+// ── Overdue detection
+function checkOverdueInvoices(showToast=true){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const overdue = state.invoices.filter(inv=>{
+    if(inv.status==='paid'||inv.status==='draft') return false;
+    if(!inv.due) return false;
+    const due = new Date(inv.due+'T00:00:00');
+    return due < today;
+  });
+
+  // Mark overdue in state
+  let changed = false;
+  overdue.forEach(inv=>{ if(inv.status!=='overdue'){inv.status='overdue';changed=true;} });
+  if(changed) save();
+
+  const banner = document.getElementById('overdue-alert-banner');
+  if(!banner) return;
+  if(overdue.length===0){
+    banner.style.display='none';
+    if(showToast) toast('✓ No overdue invoices','success');
+    return;
+  }
+  banner.style.display='';
+  const txt = document.getElementById('overdue-banner-text');
+  const totalOwed = overdue.reduce((a,i)=>a+parseFloat(i.total||0),0);
+  if(txt) txt.textContent = `${overdue.length} overdue invoice${overdue.length!==1?'s':''} — Total outstanding: R${totalOwed.toLocaleString('en-ZA',{minimumFractionDigits:2})}`;
+
+  const listEl = document.getElementById('overdue-inv-list');
+  if(listEl){
+    listEl.innerHTML = overdue.map(inv=>{
+      const due   = new Date(inv.due+'T00:00:00');
+      const days  = Math.floor((today-due)/(1000*60*60*24));
+      return `<div style="background:var(--surface2);border:1px solid rgba(255,60,60,.3);border-radius:6px;padding:8px 12px;font-size:12px">
+        <div style="font-family:'DM Mono',monospace;color:var(--accent);font-size:11px">${inv.number}</div>
+        <div style="font-weight:500">${inv.custName||'—'}</div>
+        <div style="color:var(--text2);font-size:11px">R${parseFloat(inv.total||0).toFixed(2)} · ${days}d overdue</div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:6px;color:var(--accent)" onclick="sendOverdueReminder('${inv.id}')">Send Reminder</button>
+      </div>`;
+    }).join('');
+  }
+  if(showToast) toast(`⚠ ${overdue.length} overdue invoice${overdue.length!==1?'s':''}`, 'error');
+}
+
+// ── Reminder modal
+function openReminderWizard(invId){
+  const sel = document.getElementById('reminder-inv-select');
+  if(!sel) return;
+  sel.innerHTML = '<option value="">— Select Invoice —</option>';
+  // Show pending/overdue invoices
+  state.invoices
+    .filter(i=>i.status!=='paid'&&i.status!=='draft')
+    .sort((a,b)=>new Date(a.due||0)-new Date(b.due||0))
+    .forEach(inv=>{
+      const today=new Date();today.setHours(0,0,0,0);
+      const due=inv.due?new Date(inv.due+'T00:00:00'):null;
+      const isOverdue=due&&due<today;
+      const days=due?Math.abs(Math.floor((today-due)/(864e5))):0;
+      const label=`${inv.number} — ${inv.custName||'?'} — R${parseFloat(inv.total||0).toFixed(2)} — Due: ${inv.due||'?'}${isOverdue?' ('+days+'d overdue)':''}`;
+      sel.innerHTML+=`<option value="${inv.id}">${label}</option>`;
+    });
+  if(invId) sel.value=invId;
+  prefillReminder();
+  openModal('reminder-modal');
+}
+
+function sendOverdueReminder(invId){
+  openReminderWizard(invId);
+  setTimeout(()=>{
+    const t=document.getElementById('reminder-type');
+    if(t) t.value='overdue_first';
+    updateReminderTemplate();
+  },100);
+}
+
+async function sendAllOverdueReminders(){
+  const today=new Date();today.setHours(0,0,0,0);
+  const overdue=state.invoices.filter(inv=>inv.status==='overdue'&&inv.custEmail);
+  if(!overdue.length){toast('No overdue invoices with email addresses','error');return;}
+  for(const inv of overdue){
+    await sendAutoReminder(inv,'overdue_first');
+  }
+  toast(`✓ Sent ${overdue.length} overdue reminder${overdue.length!==1?'s':''}`, 'success');
+  renderEmailLog();
+}
+
+function prefillReminder(){
+  const sel    = document.getElementById('reminder-inv-select');
+  const invId  = sel?.value;
+  const inv    = invId ? state.invoices.find(i=>i.id===invId) : null;
+  const info   = document.getElementById('reminder-inv-info');
+
+  if(inv){
+    if(info) info.style.display='';
+    const today=new Date();today.setHours(0,0,0,0);
+    const due=inv.due?new Date(inv.due+'T00:00:00'):null;
+    const isOverdue=due&&due<today;
+    const days=due?Math.abs(Math.floor((today-due)/(864e5))):0;
+    document.getElementById('rem-cust').textContent    = inv.custName||'—';
+    document.getElementById('rem-amount').textContent  = 'R'+parseFloat(inv.total||0).toFixed(2);
+    document.getElementById('rem-due').textContent     = inv.due||'—';
+    const badge=document.getElementById('rem-status-badge');
+    if(badge){badge.textContent=inv.status;badge.className=`badge badge-${inv.status}`;}
+    const daysEl=document.getElementById('rem-days-overdue');
+    if(daysEl) daysEl.textContent=isOverdue?`(${days} days overdue)`:(due&&days<=3?`(due in ${days} day${days!==1?'s':''})`:'');
+    // Auto-select reminder type
+    const typeEl=document.getElementById('reminder-type');
+    if(typeEl){
+      if(isOverdue) typeEl.value='overdue_first';
+      else if(due&&days<=1) typeEl.value='due_today';
+      else if(due&&days<=5) typeEl.value='due_soon';
+      else typeEl.value='due_soon';
+    }
+    document.getElementById('reminder-to').value=inv.custEmail||'';
+    updateReminderTemplate();
+  } else {
+    if(info) info.style.display='none';
+  }
+}
+
+function updateReminderTemplate(){
+  const sel    = document.getElementById('reminder-inv-select');
+  const inv    = sel?.value ? state.invoices.find(i=>i.id===sel.value) : null;
+  const type   = document.getElementById('reminder-type')?.value||'due_soon';
+  const s      = state.settings;
+  if(!inv) return;
+
+  const today    = new Date();today.setHours(0,0,0,0);
+  const due      = inv.due ? new Date(inv.due+'T00:00:00') : null;
+  const daysOver = due ? Math.floor((today-due)/(864e5)) : 0;
+  const dueFmt   = inv.due ? new Date(inv.due+'T00:00:00').toLocaleDateString('en-ZA',{day:'numeric',month:'long',year:'numeric'}) : 'N/A';
+  const amt      = 'R'+parseFloat(inv.total||0).toFixed(2);
+  const company  = s.company||'Sofire-IT Support';
+  const owner    = s.owner||company;
+  const phone    = s.phone||'';
+  const sig      = `
+Kind regards,
+${owner}
+${company}
+${phone}`;
+
+  const templates = {
+    due_soon: {
+      subject: `Friendly Reminder — Invoice ${inv.number} Due ${dueFmt}`,
+      message: `Dear ${inv.custName||'Client'},
+
+This is a friendly reminder that Invoice ${inv.number} for ${amt} is due on ${dueFmt}.
+
+Please ensure payment is made before the due date.
+
+Payment Details:
+Bank: ${s.bank||''}
+Account: ${s.accNum||''}
+Branch: ${s.branch||''}
+
+If you have already made payment, please disregard this message.${sig}`
+    },
+    due_today: {
+      subject: `Invoice ${inv.number} — Due Today!`,
+      message: `Dear ${inv.custName||'Client'},
+
+This is a reminder that Invoice ${inv.number} for ${amt} is due TODAY (${dueFmt}).
+
+Please make payment today to avoid any late fees.
+
+Payment Details:
+Bank: ${s.bank||''}
+Account: ${s.accNum||''}
+Branch: ${s.branch||''}
+
+Please send proof of payment to ${s.email||''}.${sig}`
+    },
+    overdue_first: {
+      subject: `OVERDUE — Invoice ${inv.number} — ${daysOver > 0 ? daysOver+' Days Overdue' : 'Payment Required'}`,
+      message: `Dear ${inv.custName||'Client'},
+
+This is to notify you that Invoice ${inv.number} for ${amt}${daysOver>0?' is now '+daysOver+' days overdue (due '+dueFmt+')':' requires immediate payment'}.
+
+Please make payment immediately to avoid further action.
+
+Payment Details:
+Bank: ${s.bank||''}
+Account: ${s.accNum||''}
+Branch: ${s.branch||''}
+Reference: ${inv.number}
+
+If you are experiencing difficulties, please contact us to arrange a payment plan.${sig}`
+    },
+    overdue_final: {
+      subject: `FINAL NOTICE — Invoice ${inv.number} — Immediate Payment Required`,
+      message: `Dear ${inv.custName||'Client'},
+
+This is a FINAL NOTICE regarding Invoice ${inv.number} for ${amt}, which is ${daysOver} days overdue.
+
+Immediate payment is required to avoid the matter being handed over for collection.
+
+Final payment deadline: ${new Date(Date.now()+7*864e5).toLocaleDateString('en-ZA',{day:'numeric',month:'long',year:'numeric'})}
+
+Payment Details:
+Bank: ${s.bank||''}
+Account: ${s.accNum||''}
+Branch: ${s.branch||''}
+Reference: ${inv.number}
+
+If payment is not received by the above date, we reserve the right to take further legal action.${sig}`
+    },
+    custom: {
+      subject: `RE: Invoice ${inv.number} — ${inv.custName||'Client'}`,
+      message: `Dear ${inv.custName||'Client'},
+
+
+
+${sig}`
+    }
+  };
+
+  const tmpl = templates[type]||templates.custom;
+  document.getElementById('reminder-subject').value = tmpl.subject;
+  document.getElementById('reminder-message').value = tmpl.message;
+}
+
+async function sendReminder(){
+  const sel     = document.getElementById('reminder-inv-select');
+  const inv     = sel?.value ? state.invoices.find(i=>i.id===sel.value) : null;
+  const to      = document.getElementById('reminder-to').value.trim();
+  const subject = document.getElementById('reminder-subject').value.trim();
+  const message = document.getElementById('reminder-message').value.trim();
+  const type    = document.getElementById('reminder-type')?.value||'custom';
+  if(!to)      { toast('Enter recipient email','error'); return; }
+  if(!subject) { toast('Enter subject','error'); return; }
+
+  const emailType = type.startsWith('overdue') ? 'overdue' : 'reminder';
+  const btn = document.querySelector('#reminder-modal .btn-primary');
+  if(btn){ btn.textContent='⏳ Sending...'; btn.disabled=true; }
+
+  try {
+    const resp = await fetch('/.netlify/functions/send-email',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ to, toName: inv?.custName||'', subject, message, attachments:[] })
+    });
+    const result = await resp.json();
+    if(resp.ok && result.success){
+      logEmail({ type: emailType, to, toName: inv?.custName||'', subject,
+        invoiceId: inv?.id||null, invoiceNum: inv?.number||null, status:'sent' });
+      toast('Reminder sent ✓','success');
+      closeModal('reminder-modal');
+      renderEmailLog();
+    } else {
+      toast('Send failed: '+(result.error||'Unknown'),'error');
+    }
+  } catch(err){
+    toast('Could not reach send function','error');
+  }
+  if(btn){ btn.textContent='✉ Send Reminder'; btn.disabled=false; }
+}
+
+async function sendAutoReminder(inv, type){
+  const s       = state.settings;
+  const to      = inv.custEmail;
+  if(!to) return;
+  // Build template inline (simplified)
+  const amt     = 'R'+parseFloat(inv.total||0).toFixed(2);
+  const today   = new Date();today.setHours(0,0,0,0);
+  const due     = inv.due?new Date(inv.due+'T00:00:00'):null;
+  const daysOver= due?Math.floor((today-due)/(864e5)):0;
+  const dueFmt  = inv.due?new Date(inv.due+'T00:00:00').toLocaleDateString('en-ZA',{day:'numeric',month:'long',year:'numeric'}):'N/A';
+  const subject = `OVERDUE — Invoice ${inv.number} — ${daysOver} Days Overdue`;
+  const message = `Dear ${inv.custName||'Client'},
+
+Invoice ${inv.number} for ${amt} is ${daysOver} days overdue (due ${dueFmt}).
+
+Please make immediate payment to:
+Bank: ${s.bank||''}
+Account: ${s.accNum||''}
+Branch: ${s.branch||''}
+Reference: ${inv.number}
+
+${s.owner||s.company}
+${s.phone||''}
+${s.email||''}`;
+  try {
+    const resp=await fetch('/.netlify/functions/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to,toName:inv.custName||'',subject,message,attachments:[]})});
+    const result=await resp.json();
+    logEmail({type:'overdue',to,toName:inv.custName||'',subject,invoiceId:inv.id,invoiceNum:inv.number,status:resp.ok&&result.success?'sent':'failed'});
+  } catch { logEmail({type:'overdue',to,toName:inv.custName||'',subject,invoiceId:inv.id,invoiceNum:inv.number,status:'failed'}); }
 }
 
 // Spreadsheet seed data — FY2026 (March 2024 – February 2025)
