@@ -2667,6 +2667,8 @@ function deleteTenant(id) {
   if (!confirm(`Delete tenant "${t?.company}"? This will permanently delete ALL their data.`)) return;
   localStorage.removeItem(getTenantDataKey(id));
   saveTenants(getTenants().filter(x=>x.id!==id));
+  // Delete from Supabase
+  if (getDbToken()) dbCall('tenants.delete', { id }).catch(e => console.warn('Supabase delete error:', e));
   renderCPTenants();
   toast('Tenant deleted','error');
 }
@@ -2703,6 +2705,21 @@ async function saveNewTenant() {
     retainer, status, notes, accountType: acctType,
     created: editingTenantId ? (tenants.find(t=>t.id===editingTenantId)?.created||Date.now()) : Date.now()
   };
+
+  // Push tenant to Supabase so they can log in from any device
+  if (getDbToken()) {
+    try {
+      const supabaseTenant = {
+        id: tenant.id, company: tenant.company, contact: tenant.contact,
+        email: tenant.email, phone: tenant.phone, username: tenant.username,
+        password_hash: tenant.passwordHash, role: 'admin',
+        status: tenant.status, retainer: tenant.retainer, notes: tenant.notes,
+      };
+      const result = await dbCall('tenants.upsert', { tenant: supabaseTenant });
+      if (result.error) console.warn('Supabase tenant upsert failed:', result.error);
+      else console.log('Tenant saved to Supabase ✓');
+    } catch(e) { console.warn('Supabase tenant push error:', e.message); }
+  }
 
   if (editingTenantId) {
     const idx = tenants.findIndex(t=>t.id===editingTenantId);
@@ -3070,6 +3087,7 @@ async function doLogin() {
         username: t.username, name: t.company || t.username, email: t.email,
         role: t.role, tenantId: isAdmin ? null : t.id,
         tenantName: isAdmin ? null : t.company,
+        accountType: t.accountType || (isAdmin ? 'freelancer' : 'freelancer'),
       }, true);
       state = { invoices:[], customers:[], payments:[], expenses:[], taxPayments:[], emailLog:[],
         nextInvNum: 202600001, editingId:null, editingExpId:null, editingCustId:null,
@@ -3835,7 +3853,32 @@ function nav(page){
   if(page==='employees'){renderEmployees();}
   if(page==='payroll'){renderPayRuns();}
   if(page==='payslips'){renderPayslips();}
-  if(page==='controlpanel'){if(canControlPanel())renderControlPanel();else{nav('dashboard');toast('Access denied','error');}}
+  if(page==='controlpanel'){
+    if(canControlPanel()){
+      renderControlPanel();
+      // Refresh tenants from Supabase to make sure we have the latest
+      if(getDbToken()){
+        dbCall('tenants.list').then(result=>{
+          if(result.tenants?.length){
+            const local = getTenants();
+            // Merge — Supabase is authoritative, but keep any local-only tenants
+            const merged = [...result.tenants];
+            local.forEach(lt=>{
+              if(!merged.find(t=>t.id===lt.id)) merged.push(lt);
+            });
+            // Normalise field names (Supabase uses snake_case)
+            const normalised = merged.map(t=>({
+              ...t,
+              passwordHash: t.passwordHash || t.password_hash,
+              accountType:  t.accountType  || t.account_type || 'freelancer',
+            }));
+            saveTenants(normalised);
+            renderControlPanel();
+          }
+        }).catch(()=>{});
+      }
+    } else { nav('dashboard'); toast('Access denied','error'); }
+  }
   if(page==='create'&&!state.editingId)initCreate();
 }
 document.querySelectorAll('.nav-item').forEach(item=>item.addEventListener('click',()=>nav(item.dataset.page)));
