@@ -2714,6 +2714,7 @@ async function saveNewTenant() {
         email: tenant.email, phone: tenant.phone, username: tenant.username,
         password_hash: tenant.passwordHash, role: 'admin',
         status: tenant.status, retainer: tenant.retainer, notes: tenant.notes,
+        account_type: tenant.accountType || 'freelancer',
       };
       const result = await dbCall('tenants.upsert', { tenant: supabaseTenant });
       if (result.error) console.warn('Supabase tenant upsert failed:', result.error);
@@ -2974,7 +2975,13 @@ async function pullFromSupabase() {
   state.taxPayments = pulled.taxPayments || [];
   state.emailLog    = pulled.emailLog    || [];
   if (pulled.settings && Object.keys(pulled.settings).length) {
+    // Preserve the accountType — it comes from the tenant record, not settings
+    const currentAccType = state.settings.accountType || getSession()?.accountType || 'freelancer';
     state.settings = { ...state.settings, ...pulled.settings };
+    // Don't let pulled settings overwrite accountType if it's already set correctly
+    if (!state.settings.accountType || state.settings.accountType === 'freelancer') {
+      state.settings.accountType = currentAccType;
+    }
   }
   if (pulled.nextInvNum) state.nextInvNum = pulled.nextInvNum;
   // Save to localStorage and clear stale flags
@@ -3029,8 +3036,9 @@ function setSession(user, remember) {
     role: user.role,
     ts: Date.now(),
     // Preserve tenant fields so refresh doesn't lose the namespace
-    tenantId: user.tenantId || null,
-    tenantName: user.tenantName || null,
+    tenantId:    user.tenantId    || null,
+    tenantName:  user.tenantName  || null,
+    accountType: user.accountType || 'freelancer',
   };
   sessionStorage.setItem('sofire_session', JSON.stringify(session));
   if (remember) localStorage.setItem('sofire_session_remember', JSON.stringify(session));
@@ -3082,30 +3090,39 @@ async function doLogin() {
       setDbToken(result.token);
       const t = result.tenant;
       const isAdmin = t.id === 'admin';
+      const _accType = t.accountType || (isAdmin ? 'freelancer' : 'freelancer');
       window.CURRENT_DATA_KEY = isAdmin ? 'sofire_crm2' : getTenantDataKey(t.id);
       setSession({
         username: t.username, name: t.company || t.username, email: t.email,
         role: t.role, tenantId: isAdmin ? null : t.id,
         tenantName: isAdmin ? null : t.company,
-        accountType: t.accountType || (isAdmin ? 'freelancer' : 'freelancer'),
+        accountType: _accType,
       }, true);
-      state = { invoices:[], customers:[], payments:[], expenses:[], taxPayments:[], emailLog:[],
-        nextInvNum: 202600001, editingId:null, editingExpId:null, editingCustId:null,
+      // Build initial state — use settings from Supabase if available, else defaults
+      const _baseSettings = result.settings || {};
+      state = { invoices:[], customers:[], payments:[], expenses:[], taxPayments:[], emailLog:[], employees:[], payRuns:[],
+        nextInvNum: _baseSettings.nextInvNum || 202600001,
+        editingId:null, editingExpId:null, editingCustId:null,
         currentSendInvId:null, currentSendType:null,
-        settings: result.settings || { company:'', tagline:'', owner:'', phone:'', email:'',
+        settings: {
+          company:'', tagline:'', owner:'', phone:'', email:'',
           website:'', address:'', bank:'', accHolder:'', accNum:'', branch:'', accType:'',
-          taxNum:'',
-    accountType:'freelancer', // 'freelancer' or 'business'
-    fyStart:3, bkEmail:'', defaultRefundPolicy:'', defaultClientObligations:'', logoData:null }
+          taxNum:'', fyStart:3, bkEmail:'', defaultRefundPolicy:'', defaultClientObligations:'', logoData:null,
+          ..._baseSettings,
+          // Always use the accountType from the tenant record — not settings
+          accountType: _accType,
+        }
       };
-      // Set pull flag so showApp() pulls fresh Supabase data
+      load(); // show local cache instantly
+      // Ensure accountType is set correctly even if load() overwrote it
+      state.settings.accountType = _accType;
+      // Set pull flag so showApp() refreshes from Supabase in background
       try {
         const _key = window.CURRENT_DATA_KEY || 'sofire_crm2';
-        const _existing = JSON.parse(localStorage.getItem(_key) || '{}');
-        localStorage.setItem(_key, JSON.stringify({ ..._existing, _needsSupabasePull: true }));
+        const _ex = JSON.parse(localStorage.getItem(_key) || '{}');
+        localStorage.setItem(_key, JSON.stringify({ ..._ex, _needsSupabasePull: true }));
       } catch(e) {}
-      load(); // show local cache instantly
-      showApp(); // detects _needsSupabasePull, pulls Supabase in background
+      showApp();
       resetBtn();
       return;
     } else if (result.success === false) {
@@ -7001,10 +7018,20 @@ function calcPayslip(emp) {
 
 // ── Show business mode nav
 function applyBusinessMode() {
-  const isBiz = state.settings.accountType === 'business';
+  // Check state.settings first, then session (set on login), then default
+  const sess = getSession();
+  const accountType = state.settings.accountType
+    || sess?.accountType
+    || 'freelancer';
+  const isBiz = accountType === 'business';
+  // Sync back to state so it's consistent
+  if (state.settings.accountType !== accountType) {
+    state.settings.accountType = accountType;
+  }
   document.querySelectorAll('.payroll-nav').forEach(el => {
     el.style.display = isBiz ? '' : 'none';
   });
+  console.log('[applyBusinessMode] accountType:', accountType, '→ payroll nav:', isBiz ? 'visible' : 'hidden');
 }
 
 // ── Employee CRUD

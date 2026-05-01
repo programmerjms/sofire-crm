@@ -129,7 +129,7 @@ exports.handler = async (event) => {
         email:       tenant.email,
         role:        tenant.role,
         status:      tenant.status,
-        accountType: tenant.account_type || 'freelancer',
+        accountType: (tenant.account_type || 'freelancer').trim(),
       },
       settings: settings || null,
     });
@@ -439,6 +439,7 @@ exports.handler = async (event) => {
       username: t.username, password_hash: t.password_hash || t.passwordHash,
       role: t.role || 'admin', status: t.status || 'active',
       retainer: t.retainer || 0, notes: t.notes,
+      account_type: t.account_type || t.accountType || 'freelancer',
     }, { onConflict: 'id' });
     // Store accountType in settings table for this tenant
     if (!error && t.accountType) {
