@@ -228,6 +228,7 @@ exports.handler = async (event) => {
         themeHeadingFont: s.theme_heading_font, themeRadius: s.theme_radius,
         invStyle: s.inv_style, invAccentColor: s.inv_accent_color, invFont: s.inv_font,
         nextInvNum: s.next_inv_num || 202600001,
+        accountType: s.account_type || 'freelancer',
       } : {};
 
       return cors({
@@ -276,6 +277,7 @@ exports.handler = async (event) => {
           theme_radius: s.settings.themeRadius, inv_style: s.settings.invStyle,
           inv_accent_color: s.settings.invAccentColor, inv_font: s.settings.invFont,
           next_inv_num: s.nextInvNum || 202600001,
+          account_type: s.settings.accountType || 'freelancer',
           updated_at: new Date().toISOString(),
         }, { onConflict: 'tenant_id' }));
       }

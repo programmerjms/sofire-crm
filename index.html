@@ -2984,6 +2984,11 @@ async function pullFromSupabase() {
     }
   }
   if (pulled.nextInvNum) state.nextInvNum = pulled.nextInvNum;
+  // After pull, restore accountType from session (it comes from tenants table, not settings)
+  const _sessAfterPull = getSession();
+  if (_sessAfterPull?.accountType && _sessAfterPull.accountType !== 'freelancer') {
+    state.settings.accountType = _sessAfterPull.accountType;
+  }
   // Save to localStorage and clear stale flags
   try {
     const toSave = JSON.parse(JSON.stringify(state));
@@ -3541,7 +3546,7 @@ function showApp() {
           localStorage.setItem(getDataKey(), JSON.stringify(d));
         }catch(e){}
         if(pulled){
-          renderDashboard(); updateSidebarBranding(); applyTheme(); updateEmailBadge();
+          renderDashboard(); updateSidebarBranding(); applyTheme(); updateEmailBadge(); applyBusinessMode();
         }
       });
     }, 800); // 800ms delay — UI renders first, then Supabase updates it
@@ -7810,7 +7815,7 @@ if(IS_ELECTRON && getDbToken()){
   setTimeout(()=>{
     pullFromSupabase().then(pulled=>{
       if(pulled){
-        renderDashboard(); updateSidebarBranding(); applyTheme(); updateEmailBadge();
+        renderDashboard(); updateSidebarBranding(); applyTheme(); updateEmailBadge(); applyBusinessMode();
         toast('✓ Data loaded from Supabase','success');
       }
     });
