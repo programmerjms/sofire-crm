@@ -91,8 +91,9 @@ exports.handler = async (event) => {
 
   const mailAttachments = (attachments || []).map(att => ({
     filename: att.filename,
-    content: Buffer.from(att.data, 'base64'),
-    contentType: att.contentType || 'application/octet-stream',
+    content: Buffer.from(att.content || att.data || '', 'base64'),
+    contentType: att.contentType || 'application/pdf',
+    encoding: 'base64',
   }));
 
   const finalHtml = htmlBody || `
