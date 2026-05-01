@@ -322,6 +322,10 @@ textarea{resize:vertical;min-height:70px}
     <div class="nav-item" data-page="customers"><span class="nav-icon">◑</span> Customers</div>
     <div class="nav-item" data-page="emails" id="nav-emails"><span class="nav-icon">✉</span> Emails <span id="email-badge" style="display:none;background:var(--accent);color:#fff;font-size:9px;padding:1px 6px;border-radius:8px;margin-left:4px;font-family:'DM Mono',monospace">0</span></div>
     <div class="nav-item" data-page="settings"><span class="nav-icon">⚙</span> Settings</div>
+    <div class="nav-section payroll-nav" id="nav-section-payroll" style="display:none">Payroll</div>
+    <div class="nav-item payroll-nav" data-page="employees" id="nav-employees" style="display:none"><span class="nav-icon">👥</span> Employees</div>
+    <div class="nav-item payroll-nav" data-page="payroll" id="nav-payroll" style="display:none"><span class="nav-icon">💰</span> Pay Runs</div>
+    <div class="nav-item payroll-nav" data-page="payslips" id="nav-payslips" style="display:none"><span class="nav-icon">📄</span> Payslips</div>
     <div class="nav-item" data-page="controlpanel" id="nav-controlpanel" style="display:none"><span class="nav-icon">👑</span> Control Panel</div>
   </nav>
   <div class="sidebar-bottom" id="sidebar-contact" style="padding-bottom:8px">
@@ -1091,6 +1095,238 @@ textarea{resize:vertical;min-height:70px}
   </div>
 </div>
 
+
+<!-- ===================== EMPLOYEES ===================== -->
+<div class="content page" id="page-employees">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:12px">
+    <div style="font-size:13px;color:var(--text2)"><span id="employee-count">0</span> employees</div>
+    <button class="btn btn-primary" onclick="openEmployeeModal()">＋ Add Employee</button>
+  </div>
+  <div class="card">
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Employee</th><th>Job Title</th><th>Basic Salary</th>
+          <th>PAYE</th><th>UIF</th><th>Net Pay</th><th>Status</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="employees-tbody">
+          <tr><td colspan="8"><div class="empty-state"><div class="empty-icon">👥</div><div class="empty-text">No employees yet</div></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== PAY RUNS ===================== -->
+<div class="content page" id="page-payroll">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:12px">
+    <div style="font-size:13px;color:var(--text2)">Manage monthly pay runs for all employees</div>
+    <button class="btn btn-primary" onclick="openPayRunModal()">＋ New Pay Run</button>
+  </div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header"><span class="card-title">Pay Run History</span></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Period</th><th>Employees</th><th>Gross Total</th>
+          <th>Total PAYE</th><th>Total UIF</th><th>Net Total</th><th>Status</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="payruns-tbody">
+          <tr><td colspan="8"><div class="empty-state"><div class="empty-icon">💰</div><div class="empty-text">No pay runs yet — add employees first</div></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== PAYSLIPS ===================== -->
+<div class="content page" id="page-payslips">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:12px">
+    <div style="font-size:13px;color:var(--text2)">All generated payslips</div>
+    <div style="display:flex;gap:8px">
+      <select id="payslip-emp-filter" onchange="renderPayslips()" style="font-size:12px;padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text)">
+        <option value="">All Employees</option>
+      </select>
+    </div>
+  </div>
+  <div class="card">
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Period</th><th>Employee</th><th>Gross</th>
+          <th>Deductions</th><th>Net Pay</th><th>Status</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="payslips-tbody">
+          <tr><td colspan="7"><div class="empty-state"><div class="empty-icon">📄</div><div class="empty-text">No payslips yet — run a pay run first</div></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== EMPLOYEE MODAL ===================== -->
+<div class="modal-overlay" id="employee-modal">
+  <div class="modal" style="max-width:680px;width:95vw">
+    <div class="modal-header">
+      <div class="modal-title" id="employee-modal-title">Add Employee</div>
+      <button class="modal-close" onclick="closeModal('employee-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <!-- Personal info -->
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace;margin-bottom:10px">Personal Details</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Full Name *</label><input type="text" id="emp-name" placeholder="Jane Smith"></div>
+        <div class="form-group"><label>ID Number</label><input type="text" id="emp-id-number" placeholder="8001015026082"></div>
+        <div class="form-group"><label>Email</label><input type="email" id="emp-email" placeholder="jane@company.com"></div>
+        <div class="form-group"><label>Phone</label><input type="text" id="emp-phone" placeholder="+27 82 000 0000"></div>
+        <div class="form-group full"><label>Address</label><input type="text" id="emp-address" placeholder="123 Main St, Cape Town"></div>
+      </div>
+      <!-- Employment info -->
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace;margin:16px 0 10px">Employment Details</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Job Title</label><input type="text" id="emp-title" placeholder="Software Developer"></div>
+        <div class="form-group"><label>Department</label><input type="text" id="emp-dept" placeholder="Engineering"></div>
+        <div class="form-group"><label>Start Date</label><input type="date" id="emp-start"></div>
+        <div class="form-group"><label>Employment Type</label>
+          <select id="emp-type">
+            <option value="fulltime">Full-Time</option>
+            <option value="parttime">Part-Time</option>
+            <option value="contract">Contract</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Tax Number (SARS)</label><input type="text" id="emp-tax-num" placeholder="1234567890"></div>
+        <div class="form-group"><label>Status</label>
+          <select id="emp-status">
+            <option value="active">Active</option>
+            <option value="leave">On Leave</option>
+            <option value="terminated">Terminated</option>
+          </select>
+        </div>
+      </div>
+      <!-- Salary & Deductions -->
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace;margin:16px 0 10px">Salary & Deductions</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Basic Salary (R/month)</label><input type="number" id="emp-salary" placeholder="20000" oninput="updateEmpCalc()"></div>
+        <div class="form-group"><label>Travel Allowance (R/month)</label><input type="number" id="emp-travel" placeholder="0" oninput="updateEmpCalc()"></div>
+      </div>
+      <!-- Medical aid -->
+      <div style="background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-size:12px;font-weight:600">Medical Aid</div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+            <input type="checkbox" id="emp-medical-enabled" onchange="updateEmpCalc()" style="accent-color:var(--accent)"> Include
+          </label>
+        </div>
+        <div id="emp-medical-block" style="display:none">
+          <div class="form-grid">
+            <div class="form-group"><label>Employer Contribution (R)</label><input type="number" id="emp-medical-employer" placeholder="2000" oninput="updateEmpCalc()"></div>
+            <div class="form-group"><label>Employee Contribution (R)</label><input type="number" id="emp-medical-employee" placeholder="1500" oninput="updateEmpCalc()"></div>
+            <div class="form-group"><label>Medical Aid Provider</label><input type="text" id="emp-medical-provider" placeholder="Discovery Health"></div>
+            <div class="form-group"><label>Dependants</label><input type="number" id="emp-medical-deps" placeholder="0" min="0" oninput="updateEmpCalc()"></div>
+          </div>
+        </div>
+      </div>
+      <!-- Pension -->
+      <div style="background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-size:12px;font-weight:600">Pension / Provident Fund</div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+            <input type="checkbox" id="emp-pension-enabled" onchange="updateEmpCalc()" style="accent-color:var(--accent)"> Include
+          </label>
+        </div>
+        <div id="emp-pension-block" style="display:none">
+          <div class="form-grid">
+            <div class="form-group"><label>Employee % of Salary</label><input type="number" id="emp-pension-emp-pct" placeholder="7.5" step="0.1" oninput="updateEmpCalc()"></div>
+            <div class="form-group"><label>Employer % of Salary</label><input type="number" id="emp-pension-er-pct" placeholder="7.5" step="0.1" oninput="updateEmpCalc()"></div>
+            <div class="form-group"><label>Fund Name</label><input type="text" id="emp-pension-name" placeholder="Allan Gray Provident Fund"></div>
+          </div>
+        </div>
+      </div>
+      <!-- Custom benefits -->
+      <div style="background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-size:12px;font-weight:600">Custom Benefits / Deductions</div>
+          <button class="btn btn-ghost btn-sm" onclick="addCustomBenefit()">＋ Add</button>
+        </div>
+        <div id="custom-benefits-list"></div>
+      </div>
+      <!-- Live calculation -->
+      <div style="background:var(--surface3);border-radius:8px;padding:14px" id="emp-calc-panel">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace;margin-bottom:12px">Live Payslip Calculation</div>
+        <div id="emp-calc-rows"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('employee-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEmployee()">Save Employee</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== PAY RUN MODAL ===================== -->
+<div class="modal-overlay" id="payrun-modal">
+  <div class="modal" style="max-width:780px;width:95vw">
+    <div class="modal-header">
+      <div class="modal-title">New Pay Run</div>
+      <button class="modal-close" onclick="closeModal('payrun-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid" style="margin-bottom:16px">
+        <div class="form-group"><label>Pay Period</label>
+          <select id="pr-period" onchange="loadPayRunEmployees()">
+            <option value="">— Select month —</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Pay Date</label><input type="date" id="pr-pay-date"></div>
+      </div>
+      <!-- Employees table for this pay run -->
+      <div class="table-wrap">
+        <table id="payrun-table">
+          <thead><tr>
+            <th><input type="checkbox" id="pr-select-all" onchange="toggleAllPayRunEmployees(this.checked)"></th>
+            <th>Employee</th><th>Basic</th><th>Allowances</th>
+            <th>PAYE</th><th>UIF (Emp)</th><th>Deductions</th><th>Net Pay</th>
+          </tr></thead>
+          <tbody id="payrun-employees-tbody"></tbody>
+          <tfoot>
+            <tr style="font-weight:700;border-top:2px solid var(--border)">
+              <td colspan="2" style="padding:10px">Totals</td>
+              <td id="pr-total-basic" class="mono" style="padding:10px">R0</td>
+              <td id="pr-total-allow" class="mono" style="padding:10px">R0</td>
+              <td id="pr-total-paye" class="mono" style="color:var(--accent);padding:10px">R0</td>
+              <td id="pr-total-uif" class="mono" style="padding:10px">R0</td>
+              <td id="pr-total-ded" class="mono" style="padding:10px">R0</td>
+              <td id="pr-total-net" class="mono" style="color:var(--green);padding:10px">R0</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('payrun-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="processPayRun()">✓ Process Pay Run &amp; Generate Payslips</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== PAYSLIP VIEW MODAL ===================== -->
+<div class="modal-overlay" id="payslip-view-modal">
+  <div class="modal" style="max-width:680px;width:95vw">
+    <div class="modal-header">
+      <div class="modal-title">Payslip</div>
+      <button class="modal-close" onclick="closeModal('payslip-view-modal')">×</button>
+    </div>
+    <div class="modal-body" style="background:#fff;padding:0">
+      <div id="payslip-view-body" style="background:#fff;color:#111;padding:32px 36px;font-size:13px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('payslip-view-modal')">Close</button>
+      <button class="btn btn-ghost" id="payslip-email-btn" onclick="emailPayslip()">✉ Email to Employee</button>
+      <button class="btn btn-primary" onclick="downloadPayslipPDF()">⬇ Download PDF</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===================== SETTINGS ===================== -->
 <!-- ===================== CONTROL PANEL ===================== -->
 <div class="content page" id="page-controlpanel">
@@ -1488,6 +1724,29 @@ textarea{resize:vertical;min-height:70px}
         </div>
       </div>
 
+    </div>
+  </div>
+
+  <!-- Business Mode Toggle -->
+  <div class="settings-section" id="settings-business-section">
+    <div class="settings-header">🏢 Account Type</div>
+    <div class="settings-body">
+      <div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:10px;padding:16px 18px;margin-bottom:12px">
+        <div>
+          <div style="font-weight:600;margin-bottom:4px">Business / Employer Mode</div>
+          <div style="font-size:12px;color:var(--text2)">Enable payroll, employee management, and payslip generation for businesses with staff.</div>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex-shrink:0;margin-left:16px">
+          <span style="font-size:12px;color:var(--text3)" id="biz-mode-label">Freelancer</span>
+          <div style="position:relative;width:44px;height:24px;background:var(--surface3);border-radius:12px;transition:background .2s;cursor:pointer" id="biz-mode-track" onclick="toggleBusinessMode()">
+            <div id="biz-mode-knob" style="position:absolute;top:3px;left:3px;width:18px;height:18px;background:#fff;border-radius:50%;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div>
+          </div>
+        </label>
+      </div>
+      <div id="biz-mode-info" style="display:none;background:rgba(74,158,255,.08);border:1px solid rgba(74,158,255,.25);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--text2);line-height:1.7">
+        ✓ Business mode active — Payroll section is now visible in the sidebar.<br>
+        You can add employees, run payroll, and generate payslips.
+      </div>
     </div>
   </div>
 
@@ -1983,6 +2242,25 @@ textarea{resize:vertical;min-height:70px}
             autocomplete="new-password">
           <div style="font-size:10px;color:var(--text3);margin-top:4px">Min 8 characters. Client will use this to log in.</div>
         </div>
+        <div class="form-group full">
+          <label style="margin-bottom:8px;display:block">Account Type</label>
+          <div style="display:flex;gap:16px;flex-wrap:wrap">
+            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:13px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;flex:1">
+              <input type="radio" name="nt-account-type" id="nt-type-freelancer" value="freelancer" checked style="accent-color:var(--accent);margin-top:2px">
+              <div>
+                <div style="font-weight:600">👤 Individual / Freelancer</div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">Invoices, expenses, personal tax</div>
+              </div>
+            </label>
+            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:13px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;flex:1">
+              <input type="radio" name="nt-account-type" id="nt-type-business" value="business" style="accent-color:var(--accent);margin-top:2px">
+              <div>
+                <div style="font-weight:600">🏢 Business / Employer</div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">+ Payroll, employees, payslips</div>
+              </div>
+            </label>
+          </div>
+        </div>
         <div class="form-group"><label>Monthly Retainer (R)</label><input type="number" id="nt-retainer" placeholder="500.00" step="0.01"></div>
         <div class="form-group"><label>Status</label>
           <select id="nt-status">
@@ -2401,7 +2679,8 @@ async function saveNewTenant() {
   const pw       = document.getElementById('nt-password').value;
   const retainer = parseFloat(document.getElementById('nt-retainer').value)||0;
   const status   = document.getElementById('nt-status').value;
-  const notes    = document.getElementById('nt-notes').value;
+  const notes      = document.getElementById('nt-notes').value;
+  const acctType   = document.querySelector('input[name="nt-account-type"]:checked')?.value || 'freelancer';
   const errEl    = document.getElementById('nt-error');
   const showErr  = msg => { errEl.textContent=msg; errEl.style.display='block'; };
 
@@ -2421,7 +2700,7 @@ async function saveNewTenant() {
   const tenant = {
     id, company, contact, email, phone, username,
     passwordHash: hash || (tenants.find(t=>t.id===editingTenantId)?.passwordHash||''),
-    retainer, status, notes,
+    retainer, status, notes, accountType: acctType,
     created: editingTenantId ? (tenants.find(t=>t.id===editingTenantId)?.created||Date.now()) : Date.now()
   };
 
@@ -2797,7 +3076,9 @@ async function doLogin() {
         currentSendInvId:null, currentSendType:null,
         settings: result.settings || { company:'', tagline:'', owner:'', phone:'', email:'',
           website:'', address:'', bank:'', accHolder:'', accNum:'', branch:'', accType:'',
-          taxNum:'', fyStart:3, bkEmail:'', defaultRefundPolicy:'', defaultClientObligations:'', logoData:null }
+          taxNum:'',
+    accountType:'freelancer', // 'freelancer' or 'business'
+    fyStart:3, bkEmail:'', defaultRefundPolicy:'', defaultClientObligations:'', logoData:null }
       };
       // Set pull flag so showApp() pulls fresh Supabase data
       try {
@@ -3210,6 +3491,7 @@ function showApp() {
   updateSidebarBranding();
   updateEmailBadge();
   applyRoleRestrictions();
+  applyBusinessMode();
   renderDashboard(); // Always render local data immediately — NEVER block on Supabase
 
   // Pull from Supabase in background (after UI is already showing)
@@ -3432,7 +3714,7 @@ async function changePassword(currentPw, newPw, confirmPw) {
 //  STATE
 // ============================================================
 let state = {
-  invoices:[], customers:[], payments:[], expenses:[], taxPayments:[],
+  invoices:[], customers:[], payments:[], expenses:[], taxPayments:[], emailLog:[], employees:[], payRuns:[],
   nextInvNum: 202603846,
   editingId: null, editingExpId: null, editingCustId: null,
   currentSendInvId: null,
@@ -3550,6 +3832,9 @@ function nav(page){
   if(page==='customers')renderCustomers();
   if(page==='settings')loadSettings();
   if(page==='emails'){renderEmailLog();checkOverdueInvoices(false);}
+  if(page==='employees'){renderEmployees();}
+  if(page==='payroll'){renderPayRuns();}
+  if(page==='payslips'){renderPayslips();}
   if(page==='controlpanel'){if(canControlPanel())renderControlPanel();else{nav('dashboard');toast('Access denied','error');}}
   if(page==='create'&&!state.editingId)initCreate();
 }
@@ -3558,6 +3843,27 @@ document.querySelectorAll('.nav-item').forEach(item=>item.addEventListener('clic
 // ============================================================
 //  SETTINGS
 // ============================================================
+function toggleBusinessMode() {
+  const current = state.settings.accountType || 'freelancer';
+  state.settings.accountType = current === 'business' ? 'freelancer' : 'business';
+  save();
+  loadBusinessSettings();
+  applyBusinessMode();
+  toast(state.settings.accountType === 'business' ? '✓ Business mode enabled' : 'Switched to Freelancer mode', 'success');
+}
+
+function loadBusinessSettings() {
+  const isBiz = state.settings.accountType === 'business';
+  const track = document.getElementById('biz-mode-track');
+  const knob  = document.getElementById('biz-mode-knob');
+  const label = document.getElementById('biz-mode-label');
+  const info  = document.getElementById('biz-mode-info');
+  if(track) track.style.background = isBiz ? 'var(--accent)' : 'var(--surface3)';
+  if(knob)  knob.style.transform = isBiz ? 'translateX(20px)' : 'translateX(0)';
+  if(label) label.textContent = isBiz ? 'Business' : 'Freelancer';
+  if(info)  info.style.display = isBiz ? 'block' : 'none';
+}
+
 function loadSettings(){
   const s=state.settings;
   const sess=getSession();
@@ -3587,6 +3893,7 @@ function loadSettings(){
   if(roleLabel) roleLabel.textContent = isTenant ? 'Portal Admin' : (ROLES[sess?.role]?.label || 'Admin');
   // Load theme controls (must come after settings loaded)
   loadThemeControls();
+  loadBusinessSettings();
   const setV=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v||''};
   setV('set-company',s.company);setV('set-tagline',s.tagline);setV('set-owner',s.owner);
   setV('set-phone',s.phone);setV('set-email',s.email);setV('set-website',s.website);setV('set-address',s.address);
@@ -6566,6 +6873,749 @@ function deleteTaxPayment(id) {
   toast('Tax payment deleted', 'error');
 }
 
+
+// ============================================================
+//  PAYROLL ENGINE
+// ============================================================
+
+// UIF ceiling 2025/2026: R17,712/month (R212,544/year)
+const UIF_CEILING   = 17712;
+const UIF_RATE      = 0.01;  // 1% employee + 1% employer
+
+// Medical aid tax credits 2027 (SARS)
+const MED_CREDIT_MAIN  = 364;  // per month for main member
+const MED_CREDIT_DEP   = 246;  // per month per dependant
+
+function calcPayslip(emp) {
+  const basic   = parseFloat(emp.salary)  || 0;
+  const travel  = parseFloat(emp.travel)  || 0;
+
+  // Pension/provident (employee portion reduces taxable income — up to 27.5% of remuneration)
+  const pensionEmpPct = emp.pensionEnabled ? (parseFloat(emp.pensionEmpPct)||0)/100 : 0;
+  const pensionErPct  = emp.pensionEnabled ? (parseFloat(emp.pensionErPct) ||0)/100 : 0;
+  const pensionEmpAmt = basic * pensionEmpPct;
+  const pensionErAmt  = basic * pensionErPct;
+
+  // Medical aid
+  const medEmpAmt = emp.medicalEnabled ? (parseFloat(emp.medicalEmployee)||0) : 0;
+  const medErAmt  = emp.medicalEnabled ? (parseFloat(emp.medicalEmployer)||0) : 0;
+  const medDeps   = emp.medicalEnabled ? (parseInt(emp.medicalDeps)||0) : 0;
+  // Medical aid tax credit
+  const medCredit = emp.medicalEnabled
+    ? (MED_CREDIT_MAIN + (medDeps * MED_CREDIT_DEP))
+    : 0;
+
+  // Custom benefits/deductions
+  const customs = (emp.customBenefits||[]).reduce((a,b)=>({
+    empDeduct: a.empDeduct + (parseFloat(b.empAmount)||0),
+    erContrib: a.erContrib + (parseFloat(b.erAmount)||0),
+  }), { empDeduct:0, erContrib:0 });
+
+  // Gross remuneration (for PAYE) = basic + travel + (portion of travel taxable)
+  // Travel allowance: 80% is taxable if not substantiated
+  const travelTaxable = travel * 0.80;
+  const grossForPAYE  = basic + travelTaxable;
+
+  // Taxable income = gross - pension employee deduction (capped at 27.5%)
+  const maxPensionDeduct = grossForPAYE * 0.275;
+  const pensionDeduct = Math.min(pensionEmpAmt, maxPensionDeduct);
+  const taxableIncome = Math.max(0, grossForPAYE - pensionDeduct);
+
+  // Annual PAYE
+  const annualTaxable = taxableIncome * 12;
+  const annualPAYE    = calcSARSTax(annualTaxable) - (medCredit * 12);
+  const monthlyPAYE   = Math.max(0, annualPAYE / 12);
+
+  // UIF (on basic + travel allowance, capped)
+  const uifBase    = Math.min(basic + travel, UIF_CEILING);
+  const uifEmp     = uifBase * UIF_RATE;
+  const uifEr      = uifBase * UIF_RATE;
+
+  // Total employee deductions
+  const totalDeductions = monthlyPAYE + uifEmp + pensionEmpAmt + medEmpAmt + customs.empDeduct;
+
+  // Net pay
+  const grossPay = basic + travel;
+  const netPay   = Math.max(0, grossPay - totalDeductions);
+
+  // Employer cost
+  const employerCost = basic + travel + uifEr + pensionErAmt + medErAmt + customs.erContrib;
+
+  return {
+    basic, travel, travelTaxable, grossPay, grossForPAYE,
+    pensionEmpAmt, pensionErAmt, pensionDeduct,
+    medEmpAmt, medErAmt, medCredit,
+    monthlyPAYE: Math.round(monthlyPAYE * 100)/100,
+    uifEmp:      Math.round(uifEmp * 100)/100,
+    uifEr:       Math.round(uifEr * 100)/100,
+    customEmpDeduct: customs.empDeduct,
+    customErContrib: customs.erContrib,
+    totalDeductions: Math.round(totalDeductions * 100)/100,
+    netPay:         Math.round(netPay * 100)/100,
+    employerCost:   Math.round(employerCost * 100)/100,
+  };
+}
+
+// ── Show business mode nav
+function applyBusinessMode() {
+  const isBiz = state.settings.accountType === 'business';
+  document.querySelectorAll('.payroll-nav').forEach(el => {
+    el.style.display = isBiz ? '' : 'none';
+  });
+}
+
+// ── Employee CRUD
+let editingEmpId = null;
+let customBenefitCount = 0;
+
+function openEmployeeModal(empId) {
+  editingEmpId = empId || null;
+  customBenefitCount = 0;
+  const emp = empId ? (state.employees||[]).find(e=>e.id===empId) : null;
+
+  document.getElementById('employee-modal-title').textContent = empId ? 'Edit Employee' : 'Add Employee';
+
+  const setVal = (id, val) => { const el=document.getElementById(id); if(el) el.value = val||''; };
+  setVal('emp-name',     emp?.name||'');
+  setVal('emp-id-number',emp?.idNumber||'');
+  setVal('emp-email',    emp?.email||'');
+  setVal('emp-phone',    emp?.phone||'');
+  setVal('emp-address',  emp?.address||'');
+  setVal('emp-title',    emp?.title||'');
+  setVal('emp-dept',     emp?.dept||'');
+  setVal('emp-start',    emp?.startDate||'');
+  setVal('emp-type',     emp?.empType||'fulltime');
+  setVal('emp-tax-num',  emp?.taxNum||'');
+  setVal('emp-status',   emp?.status||'active');
+  setVal('emp-salary',   emp?.salary||'');
+  setVal('emp-travel',   emp?.travel||'');
+
+  // Medical aid
+  const medChk = document.getElementById('emp-medical-enabled');
+  if(medChk){ medChk.checked = !!emp?.medicalEnabled; toggleMedical(!!emp?.medicalEnabled); }
+  setVal('emp-medical-employer',  emp?.medicalEmployer||'');
+  setVal('emp-medical-employee',  emp?.medicalEmployee||'');
+  setVal('emp-medical-provider',  emp?.medicalProvider||'');
+  setVal('emp-medical-deps',      emp?.medicalDeps||'0');
+
+  // Pension
+  const penChk = document.getElementById('emp-pension-enabled');
+  if(penChk){ penChk.checked = !!emp?.pensionEnabled; togglePension(!!emp?.pensionEnabled); }
+  setVal('emp-pension-emp-pct', emp?.pensionEmpPct||'');
+  setVal('emp-pension-er-pct',  emp?.pensionErPct||'');
+  setVal('emp-pension-name',    emp?.pensionName||'');
+
+  // Custom benefits
+  const list = document.getElementById('custom-benefits-list');
+  if(list) list.innerHTML = '';
+  (emp?.customBenefits||[]).forEach(b => addCustomBenefit(b));
+
+  updateEmpCalc();
+  openModal('employee-modal');
+}
+
+function toggleMedical(on) {
+  const block = document.getElementById('emp-medical-block');
+  if(block) block.style.display = on ? '' : 'none';
+  updateEmpCalc();
+}
+// Wire checkbox
+document.getElementById('emp-medical-enabled')?.addEventListener('change', function(){ toggleMedical(this.checked); });
+document.getElementById('emp-pension-enabled')?.addEventListener('change', function(){
+  const block = document.getElementById('emp-pension-block');
+  if(block) block.style.display = this.checked ? '' : 'none';
+  updateEmpCalc();
+});
+
+function addCustomBenefit(existing) {
+  customBenefitCount++;
+  const id = 'cb-' + customBenefitCount;
+  const list = document.getElementById('custom-benefits-list');
+  if(!list) return;
+  const div = document.createElement('div');
+  div.id = id;
+  div.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px';
+  div.innerHTML = `
+    <div class="form-group" style="margin-bottom:0"><label>Description</label>
+      <input type="text" class="cb-name" placeholder="e.g. Garnishee Order" value="${existing?.name||''}"></div>
+    <div class="form-group" style="margin-bottom:0"><label>Employee (R)</label>
+      <input type="number" class="cb-emp" placeholder="0" value="${existing?.empAmount||''}" oninput="updateEmpCalc()"></div>
+    <div class="form-group" style="margin-bottom:0"><label>Employer (R)</label>
+      <input type="number" class="cb-er" placeholder="0" value="${existing?.erAmount||''}" oninput="updateEmpCalc()"></div>
+    <button class="btn btn-ghost btn-sm" style="color:var(--accent);margin-bottom:0;align-self:end"
+      onclick="document.getElementById('${id}').remove();updateEmpCalc()">✕</button>`;
+  list.appendChild(div);
+  updateEmpCalc();
+}
+
+function getCustomBenefitsFromForm() {
+  const list = document.getElementById('custom-benefits-list');
+  if(!list) return [];
+  return Array.from(list.children).map(div => ({
+    name:      div.querySelector('.cb-name')?.value||'',
+    empAmount: parseFloat(div.querySelector('.cb-emp')?.value)||0,
+    erAmount:  parseFloat(div.querySelector('.cb-er')?.value)||0,
+  })).filter(b => b.name || b.empAmount || b.erAmount);
+}
+
+function updateEmpCalc() {
+  const emp = getEmpFromForm();
+  const calc = calcPayslip(emp);
+  const fmt = v => 'R' + Math.abs(v).toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const panel = document.getElementById('emp-calc-rows');
+  if(!panel) return;
+
+  const rows = [
+    ['Basic Salary',             fmt(calc.basic),          ''],
+    ['Travel Allowance',         fmt(calc.travel),         '(80% taxable)'],
+    ['Gross Pay',                fmt(calc.grossPay),       'bold'],
+    ['---','',''],
+    ['Pension (employee)',        calc.pensionEmpAmt>0?`−${fmt(calc.pensionEmpAmt)}`:'—', 'deduct'],
+    ['Medical Aid (employee)',    calc.medEmpAmt>0?`−${fmt(calc.medEmpAmt)}`:'—', 'deduct'],
+    ['Medical Aid Tax Credit',   calc.medCredit>0?`+${fmt(calc.medCredit)}`:'—', 'green'],
+    ['PAYE',                     `−${fmt(calc.monthlyPAYE)}`, 'deduct'],
+    ['UIF (employee 1%)',        `−${fmt(calc.uifEmp)}`,    'deduct'],
+    ...((emp.customBenefits||[]).filter(b=>b.empAmount>0).map(b=>[b.name, `−${fmt(b.empAmount)}`, 'deduct'])),
+    ['---','',''],
+    ['Net Take-Home Pay',        fmt(calc.netPay),         'net'],
+    ['---','',''],
+    ['Employer Cost Total',      fmt(calc.employerCost),   'employer'],
+  ];
+
+  panel.innerHTML = rows.map(([label, val, type]) => {
+    if(label==='---') return '<hr style="border:none;border-top:1px solid var(--border);margin:6px 0">';
+    const color = type==='bold'?'var(--text)':type==='deduct'?'var(--accent)':type==='net'?'var(--green)':type==='employer'?'var(--blue)':type==='green'?'var(--green)':'var(--text2)';
+    const weight = (type==='bold'||type==='net'||type==='employer') ? '700' : '400';
+    return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
+      <span style="color:var(--text2)">${label}</span>
+      <span style="font-family:'DM Mono',monospace;color:${color};font-weight:${weight}">${val}</span>
+    </div>`;
+  }).join('');
+}
+
+function getEmpFromForm() {
+  const gv = id => document.getElementById(id)?.value||'';
+  return {
+    salary:          gv('emp-salary'),
+    travel:          gv('emp-travel'),
+    medicalEnabled:  document.getElementById('emp-medical-enabled')?.checked,
+    medicalEmployer: gv('emp-medical-employer'),
+    medicalEmployee: gv('emp-medical-employee'),
+    medicalDeps:     gv('emp-medical-deps'),
+    pensionEnabled:  document.getElementById('emp-pension-enabled')?.checked,
+    pensionEmpPct:   gv('emp-pension-emp-pct'),
+    pensionErPct:    gv('emp-pension-er-pct'),
+    customBenefits:  getCustomBenefitsFromForm(),
+  };
+}
+
+function saveEmployee() {
+  const gv = id => document.getElementById(id)?.value||'';
+  const name = gv('emp-name').trim();
+  if(!name){ toast('Employee name is required','error'); return; }
+
+  const emp = {
+    id: editingEmpId || 'emp-' + Date.now(),
+    name,
+    idNumber:    gv('emp-id-number'),
+    email:       gv('emp-email'),
+    phone:       gv('emp-phone'),
+    address:     gv('emp-address'),
+    title:       gv('emp-title'),
+    dept:        gv('emp-dept'),
+    startDate:   gv('emp-start'),
+    empType:     gv('emp-type'),
+    taxNum:      gv('emp-tax-num'),
+    status:      gv('emp-status'),
+    salary:      parseFloat(gv('emp-salary'))||0,
+    travel:      parseFloat(gv('emp-travel'))||0,
+    medicalEnabled:  document.getElementById('emp-medical-enabled')?.checked||false,
+    medicalEmployer: parseFloat(gv('emp-medical-employer'))||0,
+    medicalEmployee: parseFloat(gv('emp-medical-employee'))||0,
+    medicalProvider: gv('emp-medical-provider'),
+    medicalDeps:     parseInt(gv('emp-medical-deps'))||0,
+    pensionEnabled:  document.getElementById('emp-pension-enabled')?.checked||false,
+    pensionEmpPct:   parseFloat(gv('emp-pension-emp-pct'))||0,
+    pensionErPct:    parseFloat(gv('emp-pension-er-pct'))||0,
+    pensionName:     gv('emp-pension-name'),
+    customBenefits:  getCustomBenefitsFromForm(),
+  };
+
+  if(!state.employees) state.employees = [];
+  if(editingEmpId){
+    const idx = state.employees.findIndex(e=>e.id===editingEmpId);
+    if(idx>=0) state.employees[idx] = emp; else state.employees.push(emp);
+  } else {
+    state.employees.push(emp);
+  }
+  save();
+  closeModal('employee-modal');
+  renderEmployees();
+  toast(`${name} saved ✓`, 'success');
+}
+
+function deleteEmployee(id) {
+  if(!confirm('Delete this employee? Their payslips will remain.')) return;
+  state.employees = (state.employees||[]).filter(e=>e.id!==id);
+  save();
+  if(getDbToken()) dbCall('sync.delete',{table:'employees',id}).catch(()=>{});
+  renderEmployees();
+  toast('Employee deleted','error');
+}
+
+function renderEmployees() {
+  const emps = state.employees||[];
+  const el = document.getElementById('employee-count');
+  if(el) el.textContent = emps.length;
+  const tbody = document.getElementById('employees-tbody');
+  if(!tbody) return;
+  const fmt = v => 'R'+parseFloat(v||0).toLocaleString('en-ZA',{minimumFractionDigits:2});
+
+  tbody.innerHTML = emps.length ? emps.map(emp => {
+    const calc = calcPayslip(emp);
+    const statusColor = emp.status==='active'?'var(--green)':emp.status==='leave'?'var(--yellow)':'var(--text3)';
+    return `<tr>
+      <td>
+        <div style="font-weight:500">${emp.name}</div>
+        <div style="font-size:11px;color:var(--text3)">${emp.email||'—'}</div>
+      </td>
+      <td style="font-size:12px">${emp.title||'—'}<br><span style="font-size:11px;color:var(--text3)">${emp.dept||''}</span></td>
+      <td class="mono">${fmt(emp.salary)}</td>
+      <td class="mono" style="color:var(--accent)">${fmt(calc.monthlyPAYE)}</td>
+      <td class="mono">${fmt(calc.uifEmp)}</td>
+      <td class="mono" style="color:var(--green);font-weight:600">${fmt(calc.netPay)}</td>
+      <td><span class="badge" style="color:${statusColor};background:${statusColor}22">${emp.status}</span></td>
+      <td>
+        <button class="btn btn-ghost btn-sm" onclick="openEmployeeModal('${emp.id}')">✏</button>
+        <button class="btn btn-ghost btn-sm" onclick="viewEmployeePayslips('${emp.id}')">📄</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--accent)" onclick="deleteEmployee('${emp.id}')">✕</button>
+      </td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">👥</div><div class="empty-text">No employees yet</div></div></td></tr>';
+}
+
+// ── Pay Runs
+function openPayRunModal() {
+  const emps = (state.employees||[]).filter(e=>e.status==='active');
+  if(emps.length === 0){ toast('Add active employees first','error'); return; }
+
+  // Populate period options (last 12 months)
+  const sel = document.getElementById('pr-period');
+  if(sel){
+    sel.innerHTML = '<option value="">— Select period —</option>';
+    const now = new Date();
+    for(let i=0; i<12; i++){
+      const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+      const val = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      const lbl = d.toLocaleDateString('en-ZA',{month:'long',year:'numeric'});
+      sel.innerHTML += `<option value="${val}">${lbl}</option>`;
+    }
+    sel.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  }
+  // Default pay date = end of current month
+  const now = new Date();
+  const lastDay = new Date(now.getFullYear(), now.getMonth()+1, 0);
+  const payDateEl = document.getElementById('pr-pay-date');
+  if(payDateEl) payDateEl.value = lastDay.toISOString().split('T')[0];
+
+  loadPayRunEmployees();
+  openModal('payrun-modal');
+}
+
+function toggleAllPayRunEmployees(checked) {
+  document.querySelectorAll('.pr-emp-chk').forEach(cb => cb.checked = checked);
+  updatePayRunTotals();
+}
+
+function loadPayRunEmployees() {
+  const emps = (state.employees||[]).filter(e=>e.status==='active');
+  const tbody = document.getElementById('payrun-employees-tbody');
+  if(!tbody) return;
+  const fmt = v => 'R'+parseFloat(v||0).toLocaleString('en-ZA',{minimumFractionDigits:2});
+
+  tbody.innerHTML = emps.map(emp => {
+    const calc = calcPayslip(emp);
+    return `<tr id="pr-row-${emp.id}">
+      <td><input type="checkbox" class="pr-emp-chk" checked data-emp-id="${emp.id}" onchange="updatePayRunTotals()"></td>
+      <td>
+        <div style="font-weight:500;font-size:13px">${emp.name}</div>
+        <div style="font-size:11px;color:var(--text3)">${emp.title||''}</div>
+      </td>
+      <td class="mono" style="font-size:12px">${fmt(calc.basic)}</td>
+      <td class="mono" style="font-size:12px">${fmt(calc.travel)}</td>
+      <td class="mono" style="font-size:12px;color:var(--accent)">${fmt(calc.monthlyPAYE)}</td>
+      <td class="mono" style="font-size:12px">${fmt(calc.uifEmp)}</td>
+      <td class="mono" style="font-size:12px">${fmt(calc.totalDeductions)}</td>
+      <td class="mono" style="font-size:12px;color:var(--green);font-weight:600">${fmt(calc.netPay)}</td>
+    </tr>`;
+  }).join('');
+  updatePayRunTotals();
+}
+
+function updatePayRunTotals() {
+  const emps = state.employees||[];
+  const checked = Array.from(document.querySelectorAll('.pr-emp-chk:checked')).map(cb=>cb.dataset.empId);
+  const selected = emps.filter(e=>checked.includes(e.id));
+  const totals = selected.reduce((a,emp)=>{
+    const c=calcPayslip(emp);
+    return { basic:a.basic+c.basic, allow:a.allow+c.travel, paye:a.paye+c.monthlyPAYE, uif:a.uif+c.uifEmp, ded:a.ded+c.totalDeductions, net:a.net+c.netPay };
+  }, {basic:0,allow:0,paye:0,uif:0,ded:0,net:0});
+  const fmt = v => 'R'+v.toLocaleString('en-ZA',{minimumFractionDigits:2});
+  const s=(id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=fmt(v); };
+  s('pr-total-basic',totals.basic); s('pr-total-allow',totals.allow);
+  s('pr-total-paye',totals.paye); s('pr-total-uif',totals.uif);
+  s('pr-total-ded',totals.ded); s('pr-total-net',totals.net);
+}
+
+async function processPayRun() {
+  const period  = document.getElementById('pr-period')?.value;
+  const payDate = document.getElementById('pr-pay-date')?.value;
+  if(!period){ toast('Select a pay period','error'); return; }
+
+  const checked = Array.from(document.querySelectorAll('.pr-emp-chk:checked')).map(cb=>cb.dataset.empId);
+  if(!checked.length){ toast('Select at least one employee','error'); return; }
+
+  const emps    = (state.employees||[]).filter(e=>checked.includes(e.id));
+  const payslips = emps.map(emp => {
+    const calc = calcPayslip(emp);
+    return {
+      id:       'ps-' + Date.now() + '-' + emp.id,
+      empId:    emp.id,
+      empName:  emp.name,
+      empEmail: emp.email,
+      period, payDate,
+      ...calc,
+      status: 'generated',
+    };
+  });
+
+  // Store pay run
+  if(!state.payRuns) state.payRuns = [];
+  const run = {
+    id:       'pr-' + Date.now(),
+    period, payDate,
+    empCount: emps.length,
+    payslips,
+    status:   'processed',
+    createdAt: new Date().toISOString(),
+  };
+  state.payRuns.unshift(run);
+  save();
+  closeModal('payrun-modal');
+  renderPayRuns();
+  renderPayslips();
+  toast(`Pay run processed — ${emps.length} payslips generated ✓`, 'success');
+
+  // Auto-email all payslips
+  if(confirm(`Send payslips via email to all ${emps.length} employees?`)){
+    let sent=0;
+    for(const ps of payslips){
+      if(ps.empEmail){ await sendPayslipEmail(ps); sent++; }
+    }
+    toast(`${sent} payslips emailed ✓`, 'success');
+  }
+}
+
+function renderPayRuns() {
+  const runs = state.payRuns||[];
+  const tbody = document.getElementById('payruns-tbody');
+  if(!tbody) return;
+  const fmt = v => 'R'+parseFloat(v||0).toLocaleString('en-ZA',{minimumFractionDigits:2});
+
+  tbody.innerHTML = runs.length ? runs.map(run => {
+    const totals = run.payslips.reduce((a,ps)=>({
+      gross:a.gross+(ps.grossPay||0), paye:a.paye+(ps.monthlyPAYE||0),
+      uif:a.uif+(ps.uifEmp||0), net:a.net+(ps.netPay||0)
+    }), {gross:0,paye:0,uif:0,net:0});
+    const d = new Date(run.period+'-01');
+    const period = d.toLocaleDateString('en-ZA',{month:'long',year:'numeric'});
+    return `<tr>
+      <td style="font-weight:500">${period}<br><span style="font-size:11px;color:var(--text3)">Paid: ${run.payDate||'—'}</span></td>
+      <td>${run.empCount}</td>
+      <td class="mono">${fmt(totals.gross)}</td>
+      <td class="mono" style="color:var(--accent)">${fmt(totals.paye)}</td>
+      <td class="mono">${fmt(totals.uif)}</td>
+      <td class="mono" style="color:var(--green);font-weight:600">${fmt(totals.net)}</td>
+      <td><span class="badge badge-paid">✓ Processed</span></td>
+      <td>
+        <button class="btn btn-ghost btn-sm" onclick="viewPayRun('${run.id}')">👁 View</button>
+        <button class="btn btn-ghost btn-sm" onclick="emailAllPayslips('${run.id}')">✉ Email All</button>
+      </td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">💰</div><div class="empty-text">No pay runs yet</div></div></td></tr>';
+}
+
+function renderPayslips() {
+  const runs     = state.payRuns||[];
+  const empFilter = document.getElementById('payslip-emp-filter')?.value||'';
+  const allPs    = runs.flatMap(r=>r.payslips||[]);
+  const filtered = empFilter ? allPs.filter(ps=>ps.empId===empFilter) : allPs;
+  const tbody    = document.getElementById('payslips-tbody');
+  if(!tbody) return;
+  const fmt = v => 'R'+parseFloat(v||0).toLocaleString('en-ZA',{minimumFractionDigits:2});
+
+  // Populate filter
+  const sel = document.getElementById('payslip-emp-filter');
+  if(sel && sel.children.length <= 1){
+    const emps = state.employees||[];
+    emps.forEach(e=>{ sel.innerHTML += `<option value="${e.id}">${e.name}</option>`; });
+  }
+
+  tbody.innerHTML = filtered.length ? filtered.map(ps => {
+    const d = new Date(ps.period+'-01');
+    const period = d.toLocaleDateString('en-ZA',{month:'long',year:'numeric'});
+    return `<tr>
+      <td style="font-weight:500">${period}</td>
+      <td>${ps.empName}</td>
+      <td class="mono">${fmt(ps.grossPay)}</td>
+      <td class="mono" style="color:var(--accent)">${fmt(ps.totalDeductions)}</td>
+      <td class="mono" style="color:var(--green);font-weight:600">${fmt(ps.netPay)}</td>
+      <td><span class="badge badge-paid">✓ Generated</span></td>
+      <td>
+        <button class="btn btn-ghost btn-sm" onclick="viewPayslip('${ps.id}')">👁 View</button>
+        <button class="btn btn-ghost btn-sm" onclick="downloadSinglePayslip('${ps.id}')">⬇ PDF</button>
+        <button class="btn btn-ghost btn-sm" onclick="emailSinglePayslip('${ps.id}')">✉</button>
+      </td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">📄</div><div class="empty-text">No payslips yet</div></div></td></tr>';
+}
+
+function viewEmployeePayslips(empId) {
+  nav('payslips');
+  setTimeout(()=>{
+    const sel = document.getElementById('payslip-emp-filter');
+    if(sel){ sel.value=empId; renderPayslips(); }
+  }, 100);
+}
+
+// ── Payslip HTML builder
+let currentPayslipId = null;
+function viewPayslip(psId) {
+  const ps = findPayslip(psId);
+  if(!ps) return;
+  currentPayslipId = psId;
+  document.getElementById('payslip-view-body').innerHTML = buildPayslipHTML(ps);
+  openModal('payslip-view-modal');
+}
+
+function findPayslip(psId) {
+  for(const run of (state.payRuns||[])){
+    const ps = (run.payslips||[]).find(p=>p.id===psId);
+    if(ps) return ps;
+  }
+  return null;
+}
+
+function buildPayslipHTML(ps) {
+  const s   = state.settings;
+  const fmt = v => 'R'+parseFloat(v||0).toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const d   = new Date(ps.period+'-01');
+  const period = d.toLocaleDateString('en-ZA',{month:'long',year:'numeric'});
+  const emp = (state.employees||[]).find(e=>e.id===ps.empId)||{};
+  const logo = s.logoData || DEFAULT_LOGO_64;
+
+  return `<div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#111;max-width:640px;margin:0 auto">
+    <!-- Header -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #ff3c3c">
+      <div>
+        <img src="${logo}" style="width:56px;height:56px;border-radius:8px;object-fit:cover;margin-bottom:8px;display:block">
+        <div style="font-size:16px;font-weight:700">${s.company||'Company Name'}</div>
+        <div style="font-size:11px;color:#555;margin-top:2px">${s.address||''}</div>
+        <div style="font-size:11px;color:#555">${s.phone||''} · ${s.email||''}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:20px;font-weight:800;color:#ff3c3c;letter-spacing:-0.5px">PAYSLIP</div>
+        <div style="font-size:12px;color:#555;margin-top:4px">Period: <strong>${period}</strong></div>
+        <div style="font-size:12px;color:#555">Pay Date: <strong>${ps.payDate||'—'}</strong></div>
+      </div>
+    </div>
+
+    <!-- Employee info -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+      <div style="background:#f9f9f9;border-radius:8px;padding:12px 14px">
+        <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Employee</div>
+        <div style="font-weight:700;font-size:14px">${ps.empName}</div>
+        <div style="font-size:12px;color:#555;margin-top:2px">${emp.title||'—'}</div>
+        <div style="font-size:11px;color:#888;margin-top:2px">ID: ${emp.idNumber||'—'}</div>
+        <div style="font-size:11px;color:#888">Tax No: ${emp.taxNum||'—'}</div>
+      </div>
+      <div style="background:#f9f9f9;border-radius:8px;padding:12px 14px">
+        <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Banking Details</div>
+        <div style="font-size:12px;color:#555;line-height:1.8">
+          ${emp.bankName ? `Bank: ${emp.bankName}<br>` : ''}
+          ${emp.bankAccount ? `Account: ${emp.bankAccount}<br>` : ''}
+          <span style="color:#888">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Earnings table -->
+    <table style="width:100%;border-collapse:collapse;margin-bottom:0;font-size:13px">
+      <thead>
+        <tr style="background:#ff3c3c;color:#fff">
+          <th style="padding:8px 12px;text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px">Earnings</th>
+          <th style="padding:8px 12px;text-align:right;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid #eee">
+          <td style="padding:8px 12px">Basic Salary</td>
+          <td style="padding:8px 12px;text-align:right;font-family:monospace">${fmt(ps.basic)}</td>
+        </tr>
+        ${ps.travel>0?`<tr style="border-bottom:1px solid #eee">
+          <td style="padding:8px 12px">Travel Allowance</td>
+          <td style="padding:8px 12px;text-align:right;font-family:monospace">${fmt(ps.travel)}</td>
+        </tr>`:''}
+        <tr style="background:#fff8f8">
+          <td style="padding:8px 12px;font-weight:700">Gross Pay</td>
+          <td style="padding:8px 12px;text-align:right;font-weight:700;font-family:monospace">${fmt(ps.grossPay)}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Deductions table -->
+    <table style="width:100%;border-collapse:collapse;margin-top:12px;font-size:13px">
+      <thead>
+        <tr style="background:#374151;color:#fff">
+          <th style="padding:8px 12px;text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px">Deductions</th>
+          <th style="padding:8px 12px;text-align:right;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid #eee">
+          <td style="padding:8px 12px">PAYE (Income Tax)</td>
+          <td style="padding:8px 12px;text-align:right;color:#cc3300;font-family:monospace">${fmt(ps.monthlyPAYE)}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #eee">
+          <td style="padding:8px 12px">UIF (Employee 1%)</td>
+          <td style="padding:8px 12px;text-align:right;color:#cc3300;font-family:monospace">${fmt(ps.uifEmp)}</td>
+        </tr>
+        ${ps.pensionEmpAmt>0?`<tr style="border-bottom:1px solid #eee">
+          <td style="padding:8px 12px">Pension/Provident Fund</td>
+          <td style="padding:8px 12px;text-align:right;color:#cc3300;font-family:monospace">${fmt(ps.pensionEmpAmt)}</td>
+        </tr>`:''}
+        ${ps.medEmpAmt>0?`<tr style="border-bottom:1px solid #eee">
+          <td style="padding:8px 12px">Medical Aid (Employee)</td>
+          <td style="padding:8px 12px;text-align:right;color:#cc3300;font-family:monospace">${fmt(ps.medEmpAmt)}</td>
+        </tr>`:''}
+        <tr style="background:#fff8f8">
+          <td style="padding:8px 12px;font-weight:700">Total Deductions</td>
+          <td style="padding:8px 12px;text-align:right;font-weight:700;color:#cc3300;font-family:monospace">${fmt(ps.totalDeductions)}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Net pay -->
+    <div style="background:#0f1a0f;color:#fff;border-radius:0 0 8px 8px;padding:16px 20px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:16px;font-weight:600">Net Pay</span>
+      <span style="font-size:22px;font-weight:800;color:#2dda8c;font-family:monospace">${fmt(ps.netPay)}</span>
+    </div>
+
+    ${ps.medErAmt>0||ps.pensionErAmt>0?`
+    <!-- Employer contributions (info only) -->
+    <div style="margin-top:12px;background:#f0f8ff;border-radius:8px;padding:12px 14px;font-size:12px;color:#555">
+      <div style="font-weight:700;margin-bottom:6px;color:#333">Employer Contributions (not deducted from salary)</div>
+      ${ps.medErAmt>0?`<div style="display:flex;justify-content:space-between"><span>Medical Aid (Employer)</span><span style="font-family:monospace">${fmt(ps.medErAmt)}</span></div>`:''}
+      ${ps.pensionErAmt>0?`<div style="display:flex;justify-content:space-between"><span>Pension/Provident (Employer)</span><span style="font-family:monospace">${fmt(ps.pensionErAmt)}</span></div>`:''}
+      <div style="display:flex;justify-content:space-between"><span>UIF (Employer 1%)</span><span style="font-family:monospace">${fmt(ps.uifEr)}</span></div>
+    </div>`:''}
+
+    <!-- Footer -->
+    <div style="margin-top:16px;text-align:center;font-size:11px;color:#999;border-top:1px solid #eee;padding-top:12px">
+      This is a computer-generated payslip. ${s.company||''} · ${s.email||''}
+    </div>
+  </div>`;
+}
+
+async function sendPayslipEmail(ps) {
+  if(!ps.empEmail) return;
+  const s = state.settings;
+  const d = new Date(ps.period+'-01');
+  const period = d.toLocaleDateString('en-ZA',{month:'long',year:'numeric'});
+  const fmt = v => 'R'+parseFloat(v||0).toLocaleString('en-ZA',{minimumFractionDigits:2});
+  const subject = `Payslip — ${period} — ${s.company||''}`;
+  const message = `Dear ${ps.empName},
+
+Please find your payslip for ${period} attached.
+
+Net Pay: ${fmt(ps.netPay)}
+
+Kind regards,
+${s.owner||s.company}`;
+  try {
+    const resp = await fetch(EMAIL_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ to: ps.empEmail, toName: ps.empName, subject, message, attachments:[] })});
+    const result = await resp.json();
+    if(result.success) logEmail({type:'other',to:ps.empEmail,toName:ps.empName,subject,body:message,status:'sent'});
+  } catch(e){ console.warn('Payslip email failed:',e); }
+}
+
+function emailPayslip() {
+  const ps = findPayslip(currentPayslipId);
+  if(!ps) return;
+  if(!ps.empEmail){ toast('No email address for this employee','error'); return; }
+  sendPayslipEmail(ps).then(()=>toast('Payslip emailed to '+ps.empEmail+' ✓','success'));
+}
+
+function emailSinglePayslip(psId) {
+  currentPayslipId = psId;
+  emailPayslip();
+}
+
+async function downloadSinglePayslip(psId) {
+  currentPayslipId = psId;
+  await downloadPayslipPDF();
+}
+
+async function downloadPayslipPDF() {
+  const ps = findPayslip(currentPayslipId);
+  if(!ps) return;
+  const html = buildPayslipHTML(ps);
+  const d = new Date(ps.period+'-01');
+  const period = d.toLocaleDateString('en-ZA',{month:'long',year:'numeric'}).replace(/ /g,'-');
+  const filename = `Payslip-${ps.empName.replace(/ /g,'-')}-${period}.pdf`;
+
+  // Generate PDF using same method as invoices
+  const container = document.createElement('div');
+  container.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:#ffffff;font-family:Helvetica Neue,Arial,sans-serif;font-size:12px;color:#111;padding:40px 48px;box-sizing:border-box;z-index:-1';
+  container.innerHTML = html;
+  document.body.appendChild(container);
+  await new Promise(r=>setTimeout(r,300));
+  try {
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    const canvas = await html2canvas(container,{scale:2,useCORS:true,backgroundColor:'#ffffff',width:794});
+    const {jsPDF} = window.jspdf;
+    const pdf = new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+    const w=pdf.internal.pageSize.getWidth(), h=(canvas.height/canvas.width)*w;
+    pdf.addImage(canvas.toDataURL('image/jpeg',0.95),'JPEG',0,0,w,h);
+    pdf.save(filename);
+    toast('Payslip PDF downloaded ✓','success');
+  } catch(e){ toast('PDF generation failed: '+e.message,'error'); }
+  document.body.removeChild(container);
+}
+
+async function emailAllPayslips(runId) {
+  const run = (state.payRuns||[]).find(r=>r.id===runId);
+  if(!run) return;
+  let sent=0;
+  for(const ps of run.payslips||[]){
+    if(ps.empEmail){ await sendPayslipEmail(ps); sent++; }
+  }
+  toast(`${sent} payslips emailed ✓`,'success');
+}
+
+function viewPayRun(runId) {
+  // Show all payslips for this run
+  nav('payslips');
+}
+
+// ── Business mode toggle in settings + Control Panel
+function isBusinessMode() {
+  return state.settings?.accountType === 'business';
+}
+
+
 // ============================================================
 //  INIT — auth gate + share URL handling
 // ============================================================
@@ -6684,18 +7734,17 @@ if(IS_ELECTRON){ const b=document.getElementById('electron-badge'); if(b) b.styl
   if(loginImg   && !loginImg.src)   loginImg.src   = DEFAULT_LOGO_64;
 })();
 
-// In Electron: always pull fresh from Supabase on startup (can't rely on localStorage)
+// In Electron: pull from Supabase on startup if token exists
+// Token is saved after first login — persists across app restarts
 if(IS_ELECTRON && getDbToken()){
   setTimeout(()=>{
     pullFromSupabase().then(pulled=>{
       if(pulled){
         renderDashboard(); updateSidebarBranding(); applyTheme(); updateEmailBadge();
         toast('✓ Data loaded from Supabase','success');
-      } else {
-        toast('⚠ Could not load from Supabase — showing local data. Go to Settings → Pull from Supabase','error');
       }
     });
-  }, 800); // small delay to let the UI render first
+  }, 1000);
 }
 </script>
 </body>
