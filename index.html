@@ -1265,6 +1265,19 @@ textarea{resize:vertical;min-height:70px}
         </div>
         <div id="custom-benefits-list"></div>
       </div>
+      <!-- Documents -->
+      <div style="background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-size:12px;font-weight:600">📎 Documents & Contracts</div>
+          <label class="btn btn-ghost btn-sm" style="cursor:pointer">
+            ＋ Upload
+            <input type="file" id="emp-doc-upload" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.xlsx,.xls,.txt" style="display:none" onchange="handleEmpDocUpload(this)">
+          </label>
+        </div>
+        <div id="emp-docs-list">
+          <div style="font-size:12px;color:var(--text3);padding:8px 0">No documents yet — upload contracts, agreements, ID copies etc.</div>
+        </div>
+      </div>
       <!-- Live calculation -->
       <div style="background:var(--surface3);border-radius:8px;padding:14px" id="emp-calc-panel">
         <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace;margin-bottom:12px">Live Payslip Calculation</div>
@@ -1808,19 +1821,46 @@ textarea{resize:vertical;min-height:70px}
 
 <!-- Customer Modal -->
 <div class="modal-overlay" id="customer-modal">
-  <div class="modal">
-    <div class="modal-header"><div class="modal-title" id="cust-modal-title">Add Customer</div><button class="modal-close" onclick="closeModal('customer-modal')">×</button></div>
-    <div class="modal-body">
-      <div class="form-grid">
-        <div class="form-group"><label>Name / Organisation *</label><input type="text" id="c-name"></div>
-        <div class="form-group"><label>Contact Person</label><input type="text" id="c-contact"></div>
-        <div class="form-group"><label>Phone</label><input type="text" id="c-phone"></div>
-        <div class="form-group"><label>Email</label><input type="email" id="c-email"></div>
-        <div class="form-group full"><label>Website / Address</label><input type="text" id="c-addr"></div>
-        <div class="form-group full"><label>Notes</label><textarea id="c-notes" style="min-height:60px"></textarea></div>
+  <div class="modal" style="max-width:680px;width:95vw">
+    <div class="modal-header">
+      <div class="modal-title" id="cust-modal-title">Add Customer</div>
+      <button class="modal-close" onclick="closeModal('customer-modal')">×</button>
+    </div>
+    <div class="modal-body" style="padding:0">
+      <!-- Tabs -->
+      <div style="display:flex;border-bottom:1px solid var(--border);padding:0 20px">
+        <button class="modal-tab active" id="cust-tab-info" onclick="switchCustTab('info')" style="padding:12px 16px;background:none;border:none;border-bottom:2px solid var(--accent);color:var(--text);font-size:13px;cursor:pointer;font-weight:600">Details</button>
+        <button class="modal-tab" id="cust-tab-docs" onclick="switchCustTab('docs')" style="padding:12px 16px;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-size:13px;cursor:pointer">📎 Documents <span id="cust-doc-count" style="font-size:10px;background:var(--surface3);padding:1px 6px;border-radius:8px;margin-left:4px">0</span></button>
+      </div>
+      <!-- Details panel -->
+      <div id="cust-panel-info" style="padding:20px">
+        <div class="form-grid">
+          <div class="form-group"><label>Name / Organisation *</label><input type="text" id="c-name"></div>
+          <div class="form-group"><label>Contact Person</label><input type="text" id="c-contact"></div>
+          <div class="form-group"><label>Phone</label><input type="text" id="c-phone"></div>
+          <div class="form-group"><label>Email</label><input type="email" id="c-email"></div>
+          <div class="form-group full"><label>Website / Address</label><input type="text" id="c-addr"></div>
+          <div class="form-group full"><label>Notes</label><textarea id="c-notes" style="min-height:60px"></textarea></div>
+        </div>
+      </div>
+      <!-- Documents panel -->
+      <div id="cust-panel-docs" style="display:none;padding:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div style="font-size:12px;color:var(--text2)">Upload contracts, agreements, and supporting documents</div>
+          <label class="btn btn-primary btn-sm" style="cursor:pointer">
+            ＋ Upload Document
+            <input type="file" id="cust-doc-upload" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.xlsx,.xls,.txt" style="display:none" onchange="handleCustDocUpload(this)">
+          </label>
+        </div>
+        <div id="cust-docs-list" style="display:flex;flex-direction:column;gap:8px">
+          <div style="text-align:center;padding:24px;color:var(--text3);font-size:13px">No documents yet</div>
+        </div>
       </div>
     </div>
-    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('customer-modal')">Cancel</button><button class="btn btn-primary" id="save-cust-btn" onclick="saveCustomer()">Save</button></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('customer-modal')">Cancel</button>
+      <button class="btn btn-primary" id="save-cust-btn" onclick="saveCustomer()">Save Customer</button>
+    </div>
   </div>
 </div>
 
@@ -6204,35 +6244,66 @@ function renderCustomers(){
     const invs=state.invoices.filter(i=>i.custName===c.name);
     const total=invs.reduce((s,i)=>s+parseFloat(i.total||0),0);
     const initials=c.name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+    const docCount = c.documents?.length||0;
     return`<div class="customer-card" onclick="openCustomerModal('${c.id}')">
       <div class="customer-avatar">${initials}</div>
-      <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;margin-bottom:2px">${c.name}</div>
+      <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;margin-bottom:2px">${c.name}${docCount?`<span style="font-size:10px;background:var(--blue);color:#fff;padding:1px 6px;border-radius:4px;margin-left:6px;vertical-align:middle">📎 ${docCount}</span>`:''}</div>
       <div style="font-size:12px;color:var(--text2);margin-bottom:8px">${c.phone||''}${c.email?' · '+c.email:''}</div>
       ${c.addr?`<div style="font-size:11px;color:var(--text3);margin-bottom:8px">${c.addr}</div>`:''}
-      <div style="display:flex;gap:14px;padding-top:10px;border-top:1px solid var(--border)">
-        <div><div class="mono" style="font-size:14px">${invs.length}</div><div style="font-size:11px;color:var(--text3)">Invoices</div></div>
-        <div><div class="mono" style="font-size:14px;color:var(--green)">R${total.toFixed(0)}</div><div style="font-size:11px;color:var(--text3)">Billed</div></div>
+      <div style="display:flex;gap:14px;padding-top:10px;border-top:1px solid var(--border);justify-content:space-between;align-items:center">
+        <div style="display:flex;gap:14px">
+          <div><div class="mono" style="font-size:14px">${invs.length}</div><div style="font-size:11px;color:var(--text3)">Invoices</div></div>
+          <div><div class="mono" style="font-size:14px;color:var(--green)">R${total.toFixed(0)}</div><div style="font-size:11px;color:var(--text3)">Billed</div></div>
+          ${docCount?`<div><div class="mono" style="font-size:14px;color:var(--blue)">${docCount}</div><div style="font-size:11px;color:var(--text3)">Docs</div></div>`:''}
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openCustomerDocs('${c.id}')" style="font-size:11px">📎 Docs</button>
       </div>
     </div>`;}).join(''):'<div style="grid-column:1/-1"><div class="empty-state"><div class="empty-icon">👥</div><div class="empty-text">No customers yet</div></div></div>';
 }
+function openCustomerDocs(id) {
+  openCustomerModal(id);
+  setTimeout(() => switchCustTab('docs'), 80);
+}
+
+function openEmpDocs(id) {
+  openEmployeeModal(id);
+}
+
 function openCustomerModal(id){
   state.editingCustId=id||null;
   document.getElementById('cust-modal-title').textContent=id?'Edit Customer':'Add Customer';
-  if(id){
-    const c=state.customers.find(x=>x.id===id);if(!c)return;
-    document.getElementById('c-name').value=c.name||'';document.getElementById('c-contact').value=c.contact||'';
-    document.getElementById('c-phone').value=c.phone||'';document.getElementById('c-email').value=c.email||'';
-    document.getElementById('c-addr').value=c.addr||'';document.getElementById('c-notes').value=c.notes||'';
+  switchCustTab('info');
+  const cust = id ? state.customers.find(x=>x.id===id) : null;
+  if(cust){
+    document.getElementById('c-name').value=cust.name||'';
+    document.getElementById('c-contact').value=cust.contact||'';
+    document.getElementById('c-phone').value=cust.phone||'';
+    document.getElementById('c-email').value=cust.email||'';
+    document.getElementById('c-addr').value=cust.addr||'';
+    document.getElementById('c-notes').value=cust.notes||'';
+    window._custDocsTemp = JSON.parse(JSON.stringify(cust.documents||[]));
   } else {
     ['c-name','c-contact','c-phone','c-email','c-addr','c-notes'].forEach(id=>document.getElementById(id).value='');
+    window._custDocsTemp = [];
   }
+  renderDocsList('cust');
   openModal('customer-modal');
 }
 function saveCustomer(){
   const name=document.getElementById('c-name').value.trim();if(!name){toast('Name required','error');return;}
-  const c={id:state.editingCustId||Date.now().toString(),name,contact:document.getElementById('c-contact').value,phone:document.getElementById('c-phone').value,email:document.getElementById('c-email').value,addr:document.getElementById('c-addr').value,notes:document.getElementById('c-notes').value};
+  const existing = state.customers.find(x=>x.id===state.editingCustId)||{};
+  const c={
+    id: state.editingCustId||Date.now().toString(),
+    name, contact:document.getElementById('c-contact').value,
+    phone:document.getElementById('c-phone').value,
+    email:document.getElementById('c-email').value,
+    addr:document.getElementById('c-addr').value,
+    notes:document.getElementById('c-notes').value,
+    documents: window._custDocsTemp || existing.documents || [],
+  };
   const idx=state.customers.findIndex(x=>x.id===c.id);
   if(idx>=0)state.customers[idx]=c;else state.customers.push(c);
+  window._custDocsTemp = null;
   save();closeModal('customer-modal');renderCustomers();populateCustomerSelect();toast('Customer saved ✓','success');
 }
 
@@ -7104,7 +7175,8 @@ function openEmployeeModal(empId) {
   const list = document.getElementById('custom-benefits-list');
   if(list) list.innerHTML = '';
   (emp?.customBenefits||[]).forEach(b => addCustomBenefit(b));
-
+  window._empDocsTemp = JSON.parse(JSON.stringify(emp?.documents||[]));
+  renderDocsList('emp');
   updateEmpCalc();
   openModal('employee-modal');
 }
@@ -7238,7 +7310,9 @@ function saveEmployee() {
     pensionErPct:    parseFloat(gv('emp-pension-er-pct'))||0,
     pensionName:     gv('emp-pension-name'),
     customBenefits:  getCustomBenefitsFromForm(),
+    documents:       window._empDocsTemp || [],
   };
+  window._empDocsTemp = null;
 
   if(!state.employees) state.employees = [];
   if(editingEmpId){
@@ -7287,6 +7361,7 @@ function renderEmployees() {
       <td>
         <button class="btn btn-ghost btn-sm" onclick="openEmployeeModal('${emp.id}')">✏</button>
         <button class="btn btn-ghost btn-sm" onclick="viewEmployeePayslips('${emp.id}')">📄</button>
+        <button class="btn btn-ghost btn-sm" onclick="openEmpDocs('${emp.id}')" title="Documents">📎${emp.documents?.length?' ('+emp.documents.length+')':''}</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--accent)" onclick="deleteEmployee('${emp.id}')">✕</button>
       </td>
     </tr>`;
@@ -7733,6 +7808,194 @@ function viewPayRun(runId) {
 // ── Business mode toggle in settings + Control Panel
 function isBusinessMode() {
   return state.settings?.accountType === 'business';
+}
+
+
+
+// ============================================================
+//  DOCUMENT MANAGEMENT (Customers & Employees)
+// ============================================================
+
+const DOC_ICONS = {
+  'pdf':  '📄', 'doc': '📝', 'docx': '📝',
+  'xls':  '📊', 'xlsx':'📊', 'txt':  '📃',
+  'png':  '🖼', 'jpg': '🖼', 'jpeg': '🖼',
+  'default': '📎'
+};
+
+function getDocIcon(filename) {
+  const ext = (filename||'').split('.').pop().toLowerCase();
+  return DOC_ICONS[ext] || DOC_ICONS.default;
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/1048576).toFixed(1) + ' MB';
+}
+
+// ── Render document list for either customer ('cust') or employee ('emp')
+function renderDocsList(type) {
+  const listEl  = document.getElementById(type==='cust' ? 'cust-docs-list' : 'emp-docs-list');
+  const countEl = document.getElementById(type==='cust' ? 'cust-doc-count' : null);
+  const docs    = type==='cust' ? (window._custDocsTemp||[]) : (window._empDocsTemp||[]);
+
+  if(countEl) countEl.textContent = docs.length;
+
+  if(!listEl) return;
+  if(!docs.length){
+    listEl.innerHTML = `<div style="font-size:12px;color:var(--text3);padding:8px 0;text-align:center">No documents yet</div>`;
+    return;
+  }
+
+  listEl.innerHTML = docs.map((doc, idx) => `
+    <div style="display:flex;align-items:center;gap:10px;background:var(--surface3);border-radius:8px;padding:10px 13px;border:1px solid var(--border)">
+      <span style="font-size:20px;flex-shrink:0">${getDocIcon(doc.name)}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${doc.name}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">
+          ${doc.docType ? `<span style="background:var(--surface2);padding:1px 7px;border-radius:4px;margin-right:6px">${doc.docType}</span>` : ''}
+          ${doc.size ? formatFileSize(doc.size) : ''}
+          ${doc.uploadedAt ? ' · ' + new Date(doc.uploadedAt).toLocaleDateString('en-ZA') : ''}
+        </div>
+        ${doc.notes ? `<div style="font-size:11px;color:var(--text2);margin-top:3px">${doc.notes}</div>` : ''}
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button class="btn btn-ghost btn-sm" onclick="downloadDoc('${type}',${idx})" title="Download">⬇</button>
+        <button class="btn btn-ghost btn-sm" onclick="editDocNotes('${type}',${idx})" title="Edit notes">✏</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--accent)" onclick="deleteDoc('${type}',${idx})" title="Delete">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Handle file upload for customer
+function handleCustDocUpload(input) {
+  const files = Array.from(input.files);
+  if(!files.length) return;
+  if(!window._custDocsTemp) window._custDocsTemp = [];
+  let loaded = 0;
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      window._custDocsTemp.push({
+        id:         'doc-' + Date.now() + '-' + Math.random().toString(36).slice(2,6),
+        name:       file.name,
+        size:       file.size,
+        docType:    guessDocType(file.name),
+        data:       e.target.result, // base64
+        uploadedAt: new Date().toISOString(),
+        notes:      '',
+      });
+      loaded++;
+      if(loaded === files.length) { renderDocsList('cust'); toast(`${loaded} document${loaded>1?'s':''} added ✓`,'success'); }
+    };
+    reader.readAsDataURL(file);
+  });
+  input.value = '';
+}
+
+// ── Handle file upload for employee
+function handleEmpDocUpload(input) {
+  const files = Array.from(input.files);
+  if(!files.length) return;
+  if(!window._empDocsTemp) window._empDocsTemp = [];
+  let loaded = 0;
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      window._empDocsTemp.push({
+        id:         'doc-' + Date.now() + '-' + Math.random().toString(36).slice(2,6),
+        name:       file.name,
+        size:       file.size,
+        docType:    guessDocType(file.name),
+        data:       e.target.result,
+        uploadedAt: new Date().toISOString(),
+        notes:      '',
+      });
+      loaded++;
+      if(loaded === files.length) { renderDocsList('emp'); toast(`${loaded} document${loaded>1?'s':''} added ✓`,'success'); }
+    };
+    reader.readAsDataURL(file);
+  });
+  input.value = '';
+}
+
+function guessDocType(filename) {
+  const name = (filename||'').toLowerCase();
+  if(name.includes('contract'))    return 'Contract';
+  if(name.includes('agreement'))   return 'Agreement';
+  if(name.includes('invoice'))     return 'Invoice';
+  if(name.includes('id') || name.includes('identity')) return 'ID Document';
+  if(name.includes('tax'))         return 'Tax Document';
+  if(name.includes('payslip'))     return 'Payslip';
+  if(name.includes('nda'))         return 'NDA';
+  if(name.includes('offer'))       return 'Offer Letter';
+  if(name.includes('termination')) return 'Termination';
+  if(name.includes('onboard'))     return 'Onboarding';
+  const ext = name.split('.').pop();
+  if(['jpg','jpeg','png'].includes(ext)) return 'Image';
+  if(['pdf'].includes(ext))        return 'PDF Document';
+  return 'Document';
+}
+
+function downloadDoc(type, idx) {
+  const docs = type==='cust' ? window._custDocsTemp : window._empDocsTemp;
+  const doc  = docs?.[idx];
+  if(!doc?.data) { toast('No file data available','error'); return; }
+  const a = document.createElement('a');
+  a.href = doc.data;
+  a.download = doc.name;
+  a.click();
+}
+
+function deleteDoc(type, idx) {
+  const docs = type==='cust' ? window._custDocsTemp : window._empDocsTemp;
+  if(!docs) return;
+  const name = docs[idx]?.name || 'this document';
+  if(!confirm(`Delete "${name}"?`)) return;
+  docs.splice(idx, 1);
+  renderDocsList(type);
+  toast('Document removed','error');
+}
+
+function editDocNotes(type, idx) {
+  const docs = type==='cust' ? window._custDocsTemp : window._empDocsTemp;
+  const doc  = docs?.[idx];
+  if(!doc) return;
+  const notes = prompt(`Notes for "${doc.name}":`, doc.notes||'');
+  if(notes === null) return;
+  doc.notes = notes;
+  // Also allow editing the doc type
+  const dtype = prompt(`Document type (e.g. Contract, Agreement, ID):`, doc.docType||'');
+  if(dtype !== null) doc.docType = dtype;
+  renderDocsList(type);
+}
+
+// ── Tab switcher for customer modal
+function switchCustTab(tab) {
+  document.getElementById('cust-panel-info').style.display = tab==='info' ? '' : 'none';
+  document.getElementById('cust-panel-docs').style.display = tab==='docs' ? '' : 'none';
+  const infoBtn = document.getElementById('cust-tab-info');
+  const docsBtn = document.getElementById('cust-tab-docs');
+  if(infoBtn){
+    infoBtn.style.borderBottomColor = tab==='info' ? 'var(--accent)' : 'transparent';
+    infoBtn.style.color             = tab==='info' ? 'var(--text)'   : 'var(--text2)';
+    infoBtn.style.fontWeight        = tab==='info' ? '600' : '400';
+  }
+  if(docsBtn){
+    docsBtn.style.borderBottomColor = tab==='docs' ? 'var(--accent)' : 'transparent';
+    docsBtn.style.color             = tab==='docs' ? 'var(--text)'   : 'var(--text2)';
+    docsBtn.style.fontWeight        = tab==='docs' ? '600' : '400';
+  }
+}
+
+// ── Show document count badge on customer cards
+function getDocBadge(docs) {
+  const count = docs?.length || 0;
+  if(!count) return '';
+  return `<span style="font-size:10px;background:var(--blue);color:#fff;padding:1px 6px;border-radius:4px;margin-left:6px" title="${count} document${count>1?'s':''}">📎 ${count}</span>`;
 }
 
 
