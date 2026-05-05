@@ -1355,6 +1355,65 @@ textarea{resize:vertical;min-height:70px}
   </div>
 </div>
 
+
+<!-- ===================== SPREADSHEET IMPORT MODAL ===================== -->
+<div class="modal-overlay" id="import-modal">
+  <div class="modal" style="max-width:640px;width:95vw">
+    <div class="modal-header">
+      <div class="modal-title">📥 Import Tax Spreadsheet Data</div>
+      <button class="modal-close" onclick="closeModal('import-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:var(--surface2);border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:var(--text2);line-height:1.7">
+        Upload your yearly tax spreadsheet (Excel format matching your Summary sheet layout) to import income and expenses into the CRM automatically.
+      </div>
+
+      <!-- Upload zone -->
+      <div id="import-drop-zone" style="border:2px dashed var(--border);border-radius:10px;padding:32px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:16px"
+        onclick="document.getElementById('import-file-input').click()"
+        ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+        ondragleave="this.style.borderColor='var(--border)'"
+        ondrop="event.preventDefault();handleImportDrop(event)">
+        <div style="font-size:32px;margin-bottom:8px">📊</div>
+        <div style="font-weight:600;margin-bottom:4px">Drop your Excel file here</div>
+        <div style="font-size:12px;color:var(--text3)">or click to browse — .xlsx files only</div>
+        <input type="file" id="import-file-input" accept=".xlsx" style="display:none" onchange="handleImportFile(this)">
+      </div>
+
+      <!-- Preview (shown after file selected) -->
+      <div id="import-preview" style="display:none">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:'DM Mono',monospace;margin-bottom:10px">Preview</div>
+        <div class="form-grid" style="margin-bottom:12px">
+          <div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center">
+            <div id="imp-inc-count" style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;color:var(--green)">0</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">Income Payments</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center">
+            <div id="imp-exp-count" style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;color:var(--accent)">0</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">Expense Records</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center">
+            <div id="imp-inc-total" style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--green)">R0</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">Total Income</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center">
+            <div id="imp-exp-total" style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--accent)">R0</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">Total Expenses</div>
+          </div>
+        </div>
+        <div id="imp-month-list" style="font-size:12px;color:var(--text2);max-height:160px;overflow-y:auto;background:var(--surface2);border-radius:8px;padding:10px 12px"></div>
+        <div style="margin-top:12px;background:rgba(255,60,60,.08);border:1px solid rgba(255,60,60,.2);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--text2)">
+          ⚠ This will <strong>add</strong> the imported records to FY2024/2025. Existing records with the same import ID will be skipped (no duplicates).
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('import-modal')">Cancel</button>
+      <button class="btn btn-primary" id="import-confirm-btn" style="display:none" onclick="confirmImport()">✓ Import into CRM</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===================== SETTINGS ===================== -->
 <!-- ===================== CONTROL PANEL ===================== -->
 <div class="content page" id="page-controlpanel">
@@ -1806,6 +1865,7 @@ textarea{resize:vertical;min-height:70px}
       <button class="btn btn-ghost" onclick="exportData()">⬇ Export All Data</button>
       <button class="btn btn-ghost" onclick="importData()">⬆ Import Backup</button>
       <button class="btn btn-ghost" style="color:var(--yellow)" onclick="resetAndSeed()">📥 Load FY2026 Spreadsheet Data</button>
+      <button class="btn btn-ghost" style="color:var(--blue)" onclick="openModal('import-modal')">📊 Import Tax Spreadsheet (.xlsx)</button>
       <button class="btn btn-ghost" style="color:var(--blue)" onclick="migrateToSupabase()" id="migrate-btn">☁ Push to Supabase</button>
       <button class="btn btn-ghost" style="color:var(--green)" onclick="forcePullFromSupabase()" id="pull-btn" title="Load latest data from Supabase (overwrites local)">⬇ Pull from Supabase</button>
       <button class="btn btn-ghost" style="color:var(--yellow)" onclick="reconcileSupabase()" id="reconcile-btn" title="Remove deleted records from Supabase that no longer exist locally">🔄 Sync Deletions</button>
@@ -3029,6 +3089,8 @@ async function pullFromSupabase() {
   state.expenses    = pulled.expenses;
   state.taxPayments = pulled.taxPayments || [];
   state.emailLog    = pulled.emailLog    || [];
+  state.employees   = pulled.employees   || [];
+  state.payRuns     = pulled.payRuns     || [];
   if (pulled.settings && Object.keys(pulled.settings).length) {
     // Preserve the accountType — it comes from the tenant record, not settings
     const currentAccType = state.settings.accountType || getSession()?.accountType || 'freelancer';
@@ -7996,6 +8058,248 @@ function getDocBadge(docs) {
   const count = docs?.length || 0;
   if(!count) return '';
   return `<span style="font-size:10px;background:var(--blue);color:#fff;padding:1px 6px;border-radius:4px;margin-left:6px" title="${count} document${count>1?'s':''}">📎 ${count}</span>`;
+}
+
+
+
+// ============================================================
+//  SPREADSHEET IMPORT (Tax Data from Excel)
+// ============================================================
+
+let _importData = null; // holds parsed data before confirmation
+
+function handleImportDrop(event) {
+  const file = event.dataTransfer.files[0];
+  if (file) processImportFile(file);
+}
+
+function handleImportFile(input) {
+  const file = input.files[0];
+  if (file) processImportFile(file);
+  input.value = '';
+}
+
+async function processImportFile(file) {
+  if (!file.name.endsWith('.xlsx')) {
+    toast('Please upload an .xlsx Excel file', 'error'); return;
+  }
+
+  const zone = document.getElementById('import-drop-zone');
+  if(zone){ zone.innerHTML = '<div style="font-size:28px">⏳</div><div style="font-size:13px;margin-top:6px">Reading spreadsheet...</div>'; }
+
+  try {
+    // Load SheetJS to parse the Excel file
+    if (!window.XLSX) {
+      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+    }
+
+    const buffer = await file.arrayBuffer();
+    const wb     = XLSX.read(buffer, { type: 'array' });
+
+    // Try to find the Summary sheet
+    const summarySheet = wb.Sheets['Summary'] || wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(summarySheet, { header: 1, defval: null });
+
+    // Auto-detect the data layout by finding the header row
+    // Look for a row that contains 'Income' and month names
+    let headerRow = -1, dataStart = -1;
+    const monthNames = ['march','april','may','june','july','august','sept','october','november','december','january','february','jan','feb','oct','nov','dec'];
+
+    for (let i = 0; i < Math.min(rows.length, 15); i++) {
+      const rowStr = rows[i].map(v => String(v||'').toLowerCase()).join(' ');
+      if (monthNames.some(m => rowStr.includes(m)) && rows[i].some(v => typeof v === 'number' && v > 10000)) {
+        dataStart = i; break;
+      }
+      if (rowStr.includes('income') && rowStr.includes('bank')) {
+        headerRow = i; dataStart = i + 1;
+      }
+    }
+
+    if (dataStart < 0) {
+      toast('Could not find monthly data in this spreadsheet. Make sure it has a Summary sheet with monthly rows.', 'error');
+      resetImportZone(); return;
+    }
+
+    // Detect year from sheet name or data
+    const fy = detectFY(wb, rows, dataStart);
+
+    // Parse month rows
+    const parsed = parseSpreadsheetRows(rows, dataStart, fy);
+    _importData = parsed;
+
+    showImportPreview(parsed);
+
+  } catch(e) {
+    toast('Could not read spreadsheet: ' + e.message, 'error');
+    console.error('Import error:', e);
+    resetImportZone();
+  }
+}
+
+function detectFY(wb, rows, dataStart) {
+  // Try to detect from the first data row date values
+  // Look for year numbers in the rows
+  const allText = JSON.stringify(rows).toLowerCase();
+  if (allText.includes('2025') && allText.includes('2024')) return '2025';
+  if (allText.includes('2026') && allText.includes('2025')) return '2026';
+  // Default based on last data row month
+  return new Date().getFullYear().toString();
+}
+
+function parseSpreadsheetRows(rows, dataStart, fy) {
+  const payments = [], expenses = [];
+  const fyStart  = parseInt(fy) - 1; // March of previous year
+
+  // Month sequence: March through February
+  const monthSeq = [
+    {name:'March', month:3, year:fyStart},{name:'April',month:4,year:fyStart},
+    {name:'May',   month:5, year:fyStart},{name:'June', month:6,year:fyStart},
+    {name:'July',  month:7, year:fyStart},{name:'August',month:8,year:fyStart},
+    {name:'Sept',  month:9, year:fyStart},{name:'Oct',  month:10,year:fyStart},
+    {name:'Nov',   month:11,year:fyStart},{name:'Dec',  month:12,year:fyStart},
+    {name:'Jan',   month:1, year:parseInt(fy)},{name:'Feb',month:2,year:parseInt(fy)},
+  ];
+
+  // Find columns: income is usually col 2, expenses follow
+  // Try to match header row above dataStart
+  let incomeCol = 2;
+  let expenseCols = {}; // colIndex → category name
+
+  if (dataStart > 0) {
+    const hRow = rows[dataStart - 1] || [];
+    hRow.forEach((cell, i) => {
+      const v = String(cell||'').toLowerCase().trim();
+      if (v === 'income') incomeCol = i;
+      else if (v.includes('bank charg'))   expenseCols[i] = 'Bank Charges';
+      else if (v.includes('water'))        expenseCols[i] = 'Water & Sanitation';
+      else if (v.includes('maintenance'))  expenseCols[i] = 'Vehicle Maintenance';
+      else if (v.includes('laptop'))       expenseCols[i] = 'Equipment';
+      else if (v.includes('rent'))         expenseCols[i] = 'House Rent';
+      else if (v.includes('insurance'))    expenseCols[i] = 'Insurance';
+      else if (v.includes('cellphone'))    expenseCols[i] = 'Cellphone';
+      else if (v.includes('vehicle inst')) expenseCols[i] = 'Vehicle Installment';
+      else if (v.includes('wifi') || v.includes('internet')) expenseCols[i] = 'WiFi / Internet';
+      else if (v.includes('hosting'))      expenseCols[i] = 'Hosting';
+      else if (v.includes('microsoft') || v.includes('software')) expenseCols[i] = 'Software & Subscriptions';
+      else if (v.includes('electric'))     expenseCols[i] = 'Electricity';
+      else if (v.includes('other') || v.includes('component')) expenseCols[i] = 'Other / Components';
+    });
+  }
+
+  // If no expense cols found from header, use default layout from known spreadsheet format
+  if (Object.keys(expenseCols).length === 0) {
+    expenseCols = {3:'Bank Charges',5:'Water & Sanitation',6:'Vehicle Maintenance',
+      7:'Equipment',8:'House Rent',9:'Insurance',11:'Cellphone',
+      12:'Vehicle Installment',13:'WiFi / Internet',14:'Hosting',
+      15:'Software & Subscriptions',16:'Electricity',17:'Other / Components'};
+  }
+
+  for (let i = 0; i < 12; i++) {
+    const row = rows[dataStart + i];
+    if (!row) break;
+    const { name, month, year } = monthSeq[i];
+    const dateStr = `${year}-${String(month).padStart(2,'0')}-01`;
+
+    // Income
+    const inc = safeNum(row[incomeCol]);
+    if (inc > 0) {
+      payments.push({
+        id: `import-pay-fy${fy}-${i}`,
+        type: 'invoice', customer: 'Various Clients',
+        amount: round2(inc), date: dateStr, method: 'EFT',
+        ref: `Income ${name} ${fyStart}/${String(parseInt(fy)).slice(-2)}`,
+        notes: `Imported from FY${fy} tax spreadsheet`,
+        invoiceId:'',invoiceNumber:'',employer:'',salaryType:'',paye:0,uif:0,
+      });
+    }
+
+    // Expenses
+    Object.entries(expenseCols).forEach(([colStr, catName]) => {
+      const val = safeNum(row[parseInt(colStr)]);
+      if (val > 0) {
+        expenses.push({
+          id: `import-exp-fy${fy}-${i}-${colStr}`,
+          date: dateStr, amount: round2(val), category: catName,
+          method: 'Bank Transaction',
+          desc: `${catName} — ${name} ${year}`,
+          notes: `Imported from FY${fy} tax spreadsheet`,
+        });
+      }
+    });
+  }
+
+  return { payments, expenses, fy, fyLabel: `FY${fyStart}/${fy} (Mar ${fyStart} – Feb ${fy})` };
+}
+
+function safeNum(v) {
+  const n = parseFloat(v);
+  return isNaN(n) ? 0 : Math.max(0, n);
+}
+function round2(v) { return Math.round(v * 100) / 100; }
+
+function showImportPreview(data) {
+  const { payments, expenses, fyLabel } = data;
+  const totalInc = payments.reduce((a,p)=>a+p.amount, 0);
+  const totalExp = expenses.reduce((a,e)=>a+e.amount, 0);
+  const fmt = v => 'R'+v.toLocaleString('en-ZA',{minimumFractionDigits:2});
+
+  document.getElementById('imp-inc-count').textContent = payments.length;
+  document.getElementById('imp-exp-count').textContent = expenses.length;
+  document.getElementById('imp-inc-total').textContent = fmt(totalInc);
+  document.getElementById('imp-exp-total').textContent = fmt(totalExp);
+
+  // Month breakdown
+  const monthList = document.getElementById('imp-month-list');
+  if(monthList){
+    monthList.innerHTML = `<div style="font-weight:600;margin-bottom:6px;color:var(--text)">${fyLabel}</div>` +
+      payments.map(p=>`<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid var(--border)">
+        <span>${p.ref}</span>
+        <span style="font-family:'DM Mono',monospace;color:var(--green)">${fmt(p.amount)}</span>
+      </div>`).join('');
+  }
+
+  // Show preview, hide drop zone, show confirm button
+  document.getElementById('import-drop-zone').style.display  = 'none';
+  document.getElementById('import-preview').style.display    = '';
+  document.getElementById('import-confirm-btn').style.display = '';
+}
+
+function resetImportZone() {
+  document.getElementById('import-drop-zone').style.display = '';
+  document.getElementById('import-drop-zone').innerHTML = `
+    <div style="font-size:32px;margin-bottom:8px">📊</div>
+    <div style="font-weight:600;margin-bottom:4px">Drop your Excel file here</div>
+    <div style="font-size:12px;color:var(--text3)">or click to browse — .xlsx files only</div>
+    <input type="file" id="import-file-input" accept=".xlsx" style="display:none" onchange="handleImportFile(this)">`;
+}
+
+function confirmImport() {
+  if (!_importData) return;
+  const { payments, expenses, fyLabel } = _importData;
+
+  // Check for duplicates — skip records that already exist by ID
+  const existingPayIds = new Set((state.payments||[]).map(p=>p.id));
+  const existingExpIds = new Set((state.expenses||[]).map(e=>e.id));
+
+  const newPayments = payments.filter(p => !existingPayIds.has(p.id));
+  const newExpenses = expenses.filter(e => !existingExpIds.has(e.id));
+
+  // Add to state
+  state.payments = [...(state.payments||[]), ...newPayments];
+  state.expenses = [...(state.expenses||[]), ...newExpenses];
+  save();
+
+  closeModal('import-modal');
+  _importData = null;
+  document.getElementById('import-preview').style.display = 'none';
+  document.getElementById('import-confirm-btn').style.display = 'none';
+  resetImportZone();
+
+  renderDashboard();
+  toast(`✓ Imported ${newPayments.length} income records + ${newExpenses.length} expenses from ${fyLabel}`, 'success');
+
+  // Navigate to payments to show the imported data
+  nav('payments');
 }
 
 
