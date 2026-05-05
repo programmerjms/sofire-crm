@@ -21,6 +21,8 @@ A full-featured invoice management CRM built for Juan Du Plessis / Sofire-IT Sup
 5. Click **Save**
 6. Your CRM will be live at: `https://yourusername.github.io/sofire-crm`
 
+[![Netlify Status](https://api.netlify.com/api/v1/badges/f90a66d1-4c57-4524-a4ca-90bf4f8b0f2f/deploy-status)](https://app.netlify.com/projects/sofinance/deploys)
+
 ## 💾 Data Storage
 
 All data (invoices, customers, payments, proof of payment files) is saved in your browser's `localStorage`. 
@@ -31,3 +33,5 @@ To restore from backup: open browser console and run:
 ```js
 localStorage.setItem('sofire_crm', '<paste JSON here>');
 location.reload();
+
+
