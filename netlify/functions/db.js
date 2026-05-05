@@ -78,9 +78,32 @@ function rowsToState(rows) {
   return rows;
 }
 
+// Simple in-memory rate limiter (resets on cold start — good enough for serverless)
+const _loginAttempts = new Map();
+function checkRateLimit(ip) {
+  const now = Date.now();
+  const key  = ip || 'unknown';
+  const rec  = _loginAttempts.get(key) || { count: 0, firstAt: now };
+  // Allow 10 attempts per 15 minutes
+  if (now - rec.firstAt > 15 * 60 * 1000) { _loginAttempts.set(key, { count: 1, firstAt: now }); return true; }
+  if (rec.count >= 10) return false;
+  rec.count++;
+  _loginAttempts.set(key, rec);
+  return true;
+}
+
+function getClientIP(event) {
+  return event.headers['x-forwarded-for']?.split(',')[0]?.trim()
+    || event.headers['x-real-ip']
+    || 'unknown';
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return cors({}, 200);
   if (event.httpMethod !== 'POST') return err('Method not allowed', 405);
+
+  // Rate limit auth endpoints
+  const clientIP = getClientIP(event);
 
   let body;
   try { body = JSON.parse(event.body); }
@@ -99,6 +122,11 @@ exports.handler = async (event) => {
   if (action === 'auth.login') {
     const { username, passwordHash } = payload || {};
     if (!username || !passwordHash) return err('Missing username or passwordHash');
+    // Rate limiting — max 10 login attempts per 15 minutes per IP
+    if (!checkRateLimit(clientIP)) {
+      console.warn('[security] Rate limit exceeded for IP:', clientIP, 'user:', username);
+      return err('Too many login attempts. Please wait 15 minutes.', 429);
+    }
 
     const { data: tenant, error } = await db
       .from('tenants')
@@ -172,6 +200,8 @@ exports.handler = async (event) => {
         { data: expenses },
         { data: taxPayments },
         { data: emailLog },
+        { data: employees },
+        { data: payRuns },
       ] = await Promise.all([
         db.from('settings')     .select('*').eq('tenant_id', tenantId).maybeSingle(),
         db.from('invoices')     .select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false }),
@@ -180,6 +210,8 @@ exports.handler = async (event) => {
         db.from('expenses')     .select('*').eq('tenant_id', tenantId).order('date', { ascending: false }),
         db.from('tax_payments') .select('*').eq('tenant_id', tenantId).order('date', { ascending: false }),
         db.from('email_log')    .select('*').eq('tenant_id', tenantId).order('ts', { ascending: false }).limit(500),
+        db.from('employees')    .select('*').eq('tenant_id', tenantId).order('name'),
+        db.from('pay_runs')     .select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false }),
       ]);
 
       // Map DB column names back to frontend camelCase
@@ -235,11 +267,13 @@ exports.handler = async (event) => {
         success: true,
         state: {
           invoices:    (invoices    || []).map(mapInvoice),
-          customers:   (customers   || []).map(r => ({ id: r.id, name: r.name, phone: r.phone, email: r.email, addr: r.addr, notes: r.notes })),
+          customers:   (customers   || []).map(r => ({ id: r.id, name: r.name, phone: r.phone, email: r.email, addr: r.addr, notes: r.notes, contact: r.contact, documents: r.documents || [] })),
           payments:    (payments    || []).map(mapPayment),
           expenses:    (expenses    || []).map(mapExpense),
           taxPayments: (taxPayments || []).map(mapTaxPayment),
           emailLog:    (emailLog    || []).map(mapEmailLog),
+          employees:   (employees   || []).map(r => ({ ...r, customBenefits: r.custom_benefits || [], documents: r.documents || [] })),
+          payRuns:     (payRuns     || []).map(r => ({ ...r, payslips: r.payslips || [] })),
           settings:    mapSettings(settings),
           nextInvNum:  settings?.next_inv_num || 202600001,
         }
@@ -296,11 +330,39 @@ exports.handler = async (event) => {
         })), { onConflict: 'id' }));
       }
 
-      // Customers
+      // Customers (include documents as JSONB)
       if (s.customers?.length) {
         ops.push(db.from('customers').upsert(s.customers.map(c => ({
           id: c.id, tenant_id: tenantId, name: c.name, phone: c.phone,
-          email: c.email, addr: c.addr, notes: c.notes,
+          email: c.email, addr: c.addr, notes: c.notes, contact: c.contact || null,
+          documents: (c.documents || []).map(d => ({ ...d, data: undefined })), // strip base64 binary
+        })), { onConflict: 'id' }));
+      }
+
+      // Employees
+      if (s.employees?.length) {
+        ops.push(db.from('employees').upsert(s.employees.map(e => ({
+          id: e.id, tenant_id: tenantId, name: e.name, email: e.email, phone: e.phone,
+          address: e.address, id_number: e.idNumber, title: e.title, dept: e.dept,
+          start_date: e.startDate, emp_type: e.empType, tax_num: e.taxNum, status: e.status,
+          salary: e.salary, travel: e.travel,
+          medical_enabled: e.medicalEnabled, medical_employer: e.medicalEmployer,
+          medical_employee: e.medicalEmployee, medical_provider: e.medicalProvider, medical_deps: e.medicalDeps,
+          pension_enabled: e.pensionEnabled, pension_emp_pct: e.pensionEmpPct,
+          pension_er_pct: e.pensionErPct, pension_name: e.pensionName,
+          bank_name: e.bankName, bank_holder: e.bankHolder, bank_account: e.bankAccount,
+          bank_branch: e.bankBranch, bank_type: e.bankType,
+          custom_benefits: e.customBenefits || [],
+          documents: (e.documents || []).map(d => ({ ...d, data: undefined })), // strip base64 binary
+        })), { onConflict: 'id' }));
+      }
+
+      // Pay Runs
+      if (s.payRuns?.length) {
+        ops.push(db.from('pay_runs').upsert(s.payRuns.map(r => ({
+          id: r.id, tenant_id: tenantId, period: r.period, pay_date: r.payDate,
+          emp_count: r.empCount, status: r.status, created_at: r.createdAt,
+          payslips: r.payslips || [],
         })), { onConflict: 'id' }));
       }
 
@@ -368,7 +430,7 @@ exports.handler = async (event) => {
   // ============================================================
   if (action === 'sync.delete') {
     const { table, id } = payload || {};
-    const ALLOWED = ['invoices','customers','payments','expenses','tax_payments','email_log'];
+    const ALLOWED = ['invoices','customers','payments','expenses','tax_payments','email_log','employees','pay_runs'];
     if (!ALLOWED.includes(table)) return err('Invalid table');
     if (!id) return err('Missing id');
 
@@ -386,13 +448,15 @@ exports.handler = async (event) => {
     const { state: s } = payload || {};
     if (!s) return err('Missing state');
     try {
-      const tables = ['invoices','customers','payments','expenses','tax_payments'];
+      const tables = ['invoices','customers','payments','expenses','tax_payments','employees','pay_runs'];
       const stateKeys = {
         invoices:    (s.invoices    || []).map(r => r.id),
         customers:   (s.customers   || []).map(r => r.id),
         payments:    (s.payments    || []).map(r => r.id),
         expenses:    (s.expenses    || []).map(r => r.id),
         tax_payments:(s.taxPayments || []).map(r => r.id),
+        employees:   (s.employees   || []).map(r => r.id),
+        pay_runs:    (s.payRuns     || []).map(r => r.id),
       };
       const deleteCounts = {};
       for (const table of tables) {
