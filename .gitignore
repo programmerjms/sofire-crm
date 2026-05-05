@@ -1,7 +1,5 @@
-# SoFinance - Private files - DO NOT COMMIT
-index-source.html
-desktop/
-*.env
-.env*
-node_modules/
-dist/
+cd "C:\Users\Juan\Documents\SofireIT CRM APP\sofire-crm-desktop"
+git rm --cached index-source.html
+git rm --cached -r desktop/
+git commit -m "Remove private source files"
+git push
