@@ -1,0 +1,7 @@
+# SoFinance - Private files - DO NOT COMMIT
+index-source.html
+desktop/
+*.env
+.env*
+node_modules/
+dist/
