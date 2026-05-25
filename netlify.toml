@@ -6,6 +6,9 @@
   node_bundler = "esbuild"
   included_files = ["netlify/functions/**"]
 
+[[plugins]]
+  package = "@netlify/plugin-functions-install-core"
+
 # Force UTF-8 on all HTML/CSS/JS so the browser never guesses Latin-1
 [[headers]]
   for = "/*.html"
