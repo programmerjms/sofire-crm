@@ -96,6 +96,7 @@ exports.handler = async (event) => {
     encoding: 'base64',
   }));
 
+  const escHtml = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const finalHtml = htmlBody || `
     <div style="font-family:Helvetica Neue,Arial,sans-serif;max-width:600px;margin:0 auto">
       <div style="background:#0a0a0f;padding:20px 28px;border-radius:8px 8px 0 0">
@@ -103,7 +104,7 @@ exports.handler = async (event) => {
         <div style="color:#ff3c3c;font-size:10px;letter-spacing:1px;text-transform:uppercase;margin-top:3px">Finance Department</div>
       </div>
       <div style="background:#fff;padding:28px;border:1px solid #e8e8e8;border-top:none">
-        <p style="font-size:14px;color:#444;line-height:1.7">${(message || '').replace(/\n/g, '<br>')}</p>
+        <p style="font-size:14px;color:#444;line-height:1.7">${escHtml(message || '').replace(/\n/g, '<br>')}</p>
       </div>
       <div style="background:#f8f8f8;padding:14px 28px;border:1px solid #e8e8e8;border-top:none;border-radius:0 0 8px 8px;font-size:11px;color:#999;text-align:center">
         Sofire-IT Support &middot; finance@sofire-it.co.za &middot; +27 671 371 638

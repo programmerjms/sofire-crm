@@ -507,10 +507,6 @@ exports.handler = async (event) => {
       retainer: t.retainer || 0, notes: t.notes,
       account_type: t.account_type || t.accountType || 'freelancer',
     }, { onConflict: 'id' });
-    // Store accountType in settings table for this tenant
-    if (!error && t.accountType) {
-      await db.from('settings').upsert({ tenant_id: t.id, company: t.company, owner: t.contact, email: t.email, fy_start: 3, next_inv_num: 202600001 }, { onConflict: 'tenant_id', ignoreDuplicates: true });
-    }
     if (error) return err('Tenant save failed: ' + error.message, 500);
 
     // Create default settings row for new tenants
