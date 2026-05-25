@@ -6,6 +6,22 @@
   node_bundler = "esbuild"
   included_files = ["netlify/functions/**"]
 
+# Force UTF-8 on all HTML/CSS/JS so the browser never guesses Latin-1
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Content-Type = "text/html; charset=UTF-8"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Content-Type = "text/css; charset=UTF-8"
+
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Content-Type = "application/javascript; charset=UTF-8"
+
 [[headers]]
   for = "/.netlify/functions/*"
   [headers.values]
