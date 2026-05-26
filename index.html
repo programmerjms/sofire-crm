@@ -2657,5 +2657,75 @@
   }
 })();
 </script>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ── Customer dropdown fix ───────────────────────────────────────────────────
+   *  populateCustomerSelect() is called in initCreate(), but initCreate() runs
+   *  before pullFromSupabase() resolves (800 ms delay + network). This means
+   *  the dropdown can be empty when the user first opens "New Invoice".
+   *  editInvoice() also never calls populateCustomerSelect() at all.
+   *
+   *  Fix: refresh the dropdown (a) whenever the create page becomes visible, and
+   *       (b) after every Supabase pull that returns data.
+   * ──────────────────────────────────────────────────────────────────────────── */
+
+  function refreshCustomerDropdown() {
+    var createPage = document.getElementById('page-create');
+    if (!createPage || !createPage.classList.contains('active')) return;
+    if (typeof populateCustomerSelect !== 'function') return;
+
+    // Preserve the current selection so a background pull doesn't wipe it.
+    var sel = document.getElementById('inv-customer');
+    var prev = sel ? sel.value : '';
+
+    populateCustomerSelect();
+
+    if (prev && sel) {
+      sel.value = prev;
+      // If the previously selected customer no longer exists, clear gracefully.
+      if (sel.value !== prev) sel.value = '';
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+
+    // 1. Watch for the create-invoice page becoming active.
+    var createPage = document.getElementById('page-create');
+    if (createPage) {
+      new MutationObserver(function (mutations) {
+        for (var i = 0; i < mutations.length; i++) {
+          if (mutations[i].attributeName === 'class' && createPage.classList.contains('active')) {
+            // initCreate() is synchronous inside nav(), so by the time this
+            // fires the initial populate has already run.  We refresh once more
+            // to catch any data that arrived between login and navigation.
+            setTimeout(refreshCustomerDropdown, 100);
+            break;
+          }
+        }
+      }).observe(createPage, { attributes: true });
+    }
+
+    // 2. Patch pullFromSupabase so the dropdown is refreshed after every pull.
+    //    Uses setTimeout(0) to let the main script finish its own DOMContentLoaded
+    //    work before we install the wrapper.
+    setTimeout(function () {
+      if (typeof pullFromSupabase === 'function') {
+        var _orig = pullFromSupabase;
+        window.pullFromSupabase = async function () {
+          var result = await _orig.apply(this, arguments);
+          // After data arrives, refresh the dropdown if the user is on the create page.
+          refreshCustomerDropdown();
+          return result;
+        };
+      }
+    }, 0);
+
+  });
+
+}());
+</script>
 </body>
 </html>
