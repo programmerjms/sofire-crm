@@ -710,7 +710,8 @@
     </div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-ghost btn-sm" onclick="checkOverdueInvoices()" title="Check all invoices and flag overdue ones">Check Overdue</button>
-      <button class="btn btn-primary btn-sm" onclick="openReminderWizard()">Send Reminder</button>
+      <button class="btn btn-ghost btn-sm" onclick="openReminderWizard()">Send Reminder</button>
+      <button class="btn btn-primary btn-sm" onclick="openDueRemindersModal()" title="Send reminders with invoice PDF attached">&#128338; Due Reminders + PDF</button>
     </div>
   </div>
 
@@ -857,6 +858,79 @@
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('reminder-modal')">Cancel</button>
       <button class="btn btn-primary" onclick="sendReminder()">Send Reminder</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ===================== DUE REMINDERS MODAL ===================== -->
+<div class="modal-overlay" id="due-reminders-modal">
+  <div class="modal" style="max-width:720px;width:95vw">
+    <div class="modal-header">
+      <div class="modal-title">&#128338; Send Due Reminders with Invoice PDF</div>
+      <button class="modal-close" onclick="closeModal('due-reminders-modal')">&times;</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Filter row -->
+      <div style="display:flex;align-items:flex-end;gap:14px;margin-bottom:14px;flex-wrap:wrap">
+        <div class="form-group" style="margin:0;min-width:220px">
+          <label>Show invoices due within</label>
+          <select id="due-remind-days" onchange="refreshDueReminderList()" style="margin-top:4px">
+            <option value="0">Today only</option>
+            <option value="1">Today &amp; tomorrow</option>
+            <option value="3" selected>Within 3 days</option>
+            <option value="7">Within 7 days</option>
+            <option value="30">Within 30 days</option>
+            <option value="9999">All pending (overdue + upcoming)</option>
+          </select>
+        </div>
+        <div style="font-size:12px;color:var(--text3);padding-bottom:4px">
+          <span id="due-remind-count">0</span> invoices with email &nbsp;&bull;&nbsp;
+          <a href="#" onclick="toggleAllDueReminders(true);return false" style="color:var(--accent);text-decoration:none">Select all</a> /
+          <a href="#" onclick="toggleAllDueReminders(false);return false" style="color:var(--text3);text-decoration:none">None</a>
+        </div>
+      </div>
+
+      <!-- Invoice list -->
+      <div style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr style="background:var(--surface2);position:sticky;top:0;z-index:1">
+              <th style="padding:8px 10px;text-align:left;width:32px">
+                <input type="checkbox" id="due-remind-all" onchange="toggleAllDueReminders(this.checked)" title="Select / deselect all">
+              </th>
+              <th style="padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.7px;font-family:'DM Mono',monospace;color:var(--text3)">Invoice</th>
+              <th style="padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.7px;font-family:'DM Mono',monospace;color:var(--text3)">Customer</th>
+              <th style="padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.7px;font-family:'DM Mono',monospace;color:var(--text3)">Email</th>
+              <th style="padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.7px;font-family:'DM Mono',monospace;color:var(--text3)">Due</th>
+              <th style="padding:8px 10px;text-align:right;font-size:10px;text-transform:uppercase;letter-spacing:.7px;font-family:'DM Mono',monospace;color:var(--text3)">Amount</th>
+            </tr>
+          </thead>
+          <tbody id="due-reminder-tbody">
+            <tr><td colspan="6" style="padding:24px;text-align:center;color:var(--text3)">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Progress -->
+      <div id="due-remind-progress" style="display:none;margin-top:14px">
+        <div style="background:var(--surface2);border-radius:8px;padding:12px 14px">
+          <div style="font-size:12px;font-weight:600;margin-bottom:7px;color:var(--text)">Sending reminders…</div>
+          <div style="background:var(--border);border-radius:4px;height:5px;overflow:hidden;margin-bottom:7px">
+            <div id="due-remind-bar" style="background:var(--accent);height:100%;width:0%;transition:width .35s ease"></div>
+          </div>
+          <div id="due-remind-status" style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace"></div>
+        </div>
+      </div>
+
+      <div style="margin-top:10px;font-size:11px;color:var(--text3)">
+        &#128206; Each email includes the invoice PDF attached &nbsp;&bull;&nbsp; Invoices without an email address are skipped
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('due-reminders-modal')">Close</button>
+      <button class="btn btn-primary" id="due-remind-send-btn" onclick="sendDueReminders()">Send Selected Reminders</button>
     </div>
   </div>
 </div>
@@ -2724,6 +2798,241 @@
     }, 0);
 
   });
+
+}());
+</script>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ═══════════════════════════════════════════════════════════════════
+   *  Due Reminders with PDF Attachment
+   *  Sends email reminders for pending invoices due within N days,
+   *  with the invoice PDF generated and attached to each email.
+   * ═══════════════════════════════════════════════════════════════════ */
+
+  /* ── Open modal ────────────────────────────────────────────── */
+  window.openDueRemindersModal = function () {
+    var modal = document.getElementById('due-reminders-modal');
+    if (!modal) return;
+    var prog = document.getElementById('due-remind-progress');
+    if (prog) prog.style.display = 'none';
+    var bar = document.getElementById('due-remind-bar');
+    if (bar) bar.style.width = '0%';
+    var btn = document.getElementById('due-remind-send-btn');
+    if (btn) { btn.disabled = false; btn.textContent = 'Send Selected Reminders'; }
+    modal.classList.add('show');
+    refreshDueReminderList();
+  };
+
+  /* ── Build invoice list ─────────────────────────────────────── */
+  window.refreshDueReminderList = function () {
+    var daysAhead = parseInt(document.getElementById('due-remind-days').value) || 3;
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var cutoff = new Date(today);
+    cutoff.setDate(cutoff.getDate() + daysAhead);
+
+    var invoices = (state.invoices || [])
+      .filter(function (inv) {
+        if (inv.status === 'paid' || inv.status === 'draft') return false;
+        if (!inv.due) return false;
+        var due = new Date(inv.due + 'T00:00:00');
+        return due <= cutoff;
+      })
+      .sort(function (a, b) { return new Date(a.due) - new Date(b.due); });
+
+    var tbody = document.getElementById('due-reminder-tbody');
+    tbody.innerHTML = '';
+
+    invoices.forEach(function (inv) {
+      var due      = new Date(inv.due + 'T00:00:00');
+      var diff     = Math.round((due - today) / 86400000);
+      var overdue  = diff < 0;
+      var hasEmail = !!inv.custEmail;
+
+      var dueCell;
+      if (overdue)         dueCell = '<span style="color:var(--accent);font-weight:600">' + Math.abs(diff) + 'd overdue</span>';
+      else if (diff === 0) dueCell = '<span style="color:var(--yellow);font-weight:600">Due today</span>';
+      else if (diff === 1) dueCell = '<span style="color:var(--yellow)">Due tomorrow</span>';
+      else                 dueCell = '<span style="color:var(--text2)">In ' + diff + ' days</span>';
+
+      var tr = document.createElement('tr');
+      tr.style.borderBottom = '1px solid var(--border)';
+      tr.innerHTML =
+        '<td style="padding:7px 10px">' +
+          '<input type="checkbox" class="due-remind-cb" value="' + _esc(inv.id) + '"' +
+          (hasEmail ? ' checked' : ' disabled title="No email address on this invoice"') + '>' +
+        '</td>' +
+        '<td style="padding:7px 10px;font-family:\'DM Mono\',monospace;font-size:11px">' + _esc(inv.number || '—') + '</td>' +
+        '<td style="padding:7px 10px">' + _esc(inv.custName || '—') + '</td>' +
+        '<td style="padding:7px 10px;font-size:11px;color:' + (hasEmail ? 'var(--text2)' : 'var(--accent)') + '">' +
+          (hasEmail ? _esc(inv.custEmail) : 'No email') +
+        '</td>' +
+        '<td style="padding:7px 10px">' + dueCell + '</td>' +
+        '<td style="padding:7px 10px;text-align:right;font-family:\'DM Mono\',monospace">R' +
+          parseFloat(inv.total || 0).toFixed(2) +
+        '</td>';
+      tbody.appendChild(tr);
+    });
+
+    if (!invoices.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="padding:28px;text-align:center;color:var(--text3)">No pending invoices found for this period.</td></tr>';
+    }
+
+    var withEmail = invoices.filter(function (i) { return !!i.custEmail; }).length;
+    document.getElementById('due-remind-count').textContent = withEmail;
+    var allBox = document.getElementById('due-remind-all');
+    if (allBox) allBox.checked = withEmail > 0;
+  };
+
+  /* ── Toggle all checkboxes ──────────────────────────────────── */
+  window.toggleAllDueReminders = function (checked) {
+    document.querySelectorAll('.due-remind-cb:not(:disabled)').forEach(function (cb) {
+      cb.checked = !!checked;
+    });
+    var allBox = document.getElementById('due-remind-all');
+    if (allBox) allBox.checked = !!checked;
+  };
+
+  /* ── Send selected reminders ────────────────────────────────── */
+  window.sendDueReminders = async function () {
+    var selected = Array.from(document.querySelectorAll('.due-remind-cb:checked'))
+                        .map(function (cb) { return cb.value; });
+
+    if (!selected.length) {
+      if (typeof toast === 'function') toast('Select at least one invoice', 'error');
+      return;
+    }
+
+    var btn      = document.getElementById('due-remind-send-btn');
+    var prog     = document.getElementById('due-remind-progress');
+    var bar      = document.getElementById('due-remind-bar');
+    var statusEl = document.getElementById('due-remind-status');
+
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+    prog.style.display = 'block';
+    bar.style.width = '0%';
+    statusEl.textContent = '';
+
+    var invoices = (state.invoices || []).filter(function (inv) {
+      return selected.indexOf(inv.id) !== -1 && !!inv.custEmail;
+    });
+
+    var total = invoices.length, sent = 0, failed = 0;
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+
+    for (var idx = 0; idx < invoices.length; idx++) {
+      var inv = invoices[idx];
+      bar.style.width = Math.round((idx / total) * 100) + '%';
+      statusEl.textContent = 'Generating PDF for Invoice ' + inv.number + '…';
+
+      try {
+        var pdfBase64 = await generateInvoicePDF(inv, state.settings);
+
+        var due     = new Date(inv.due + 'T00:00:00');
+        var diff    = Math.round((due - today) / 86400000);
+        var overdue = diff < 0;
+        var absDiff = Math.abs(diff);
+        var s       = state.settings || {};
+        var amount  = 'R' + parseFloat(inv.total || 0).toFixed(2);
+        var dueFmt  = due.toLocaleDateString('en-ZA', { day: '2-digit', month: 'long', year: 'numeric' });
+
+        var subject;
+        if (overdue)         subject = 'Overdue Invoice ' + inv.number + ' – ' + amount + ' Outstanding';
+        else if (diff === 0) subject = 'Invoice ' + inv.number + ' Due Today – ' + amount;
+        else                 subject = 'Invoice ' + inv.number + ' Due in ' + diff + ' Day' + (diff !== 1 ? 's' : '') + ' – ' + amount;
+
+        var situation;
+        if (overdue) {
+          situation = 'Invoice ' + inv.number + ' for ' + amount + ' was due on ' + dueFmt +
+            ' and is now ' + absDiff + ' day' + (absDiff !== 1 ? 's' : '') + ' overdue.\n\nPlease arrange payment as soon as possible.';
+        } else if (diff === 0) {
+          situation = 'Invoice ' + inv.number + ' for ' + amount + ' is due today (' + dueFmt + ').\n\nPlease ensure payment is made by end of business today.';
+        } else {
+          situation = 'Invoice ' + inv.number + ' for ' + amount + ' is due on ' + dueFmt +
+            ' (' + diff + ' day' + (diff !== 1 ? 's' : '') + ' from today).\n\nPlease ensure payment is made by the due date.';
+        }
+
+        var body =
+          'Dear ' + (inv.custName || 'Client') + ',\n\n' +
+          'This is a ' + (overdue ? 'reminder' : 'friendly reminder') + ' that ' + situation + '\n\n' +
+          'Please find the invoice attached to this email.\n\n' +
+          'Payment details:\n' +
+          'Bank: '           + (s.bank      || '') + '\n' +
+          'Account holder: ' + (s.accHolder || '') + '\n' +
+          'Account number: ' + (s.accNum    || '') + '\n' +
+          'Branch: '         + (s.branch    || '') + '\n' +
+          'Reference: '      + inv.number   + '\n\n' +
+          'If you have already made payment, please disregard this reminder.\n\n' +
+          (s.owner || s.company || '') + '\n' +
+          (s.phone || '') + '\n' +
+          (s.email || '');
+
+        statusEl.textContent = 'Sending to ' + inv.custEmail + '…';
+
+        var res = await fetch(EMAIL_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to:      inv.custEmail,
+            toName:  inv.custName || '',
+            subject: subject,
+            message: body,
+            attachments: [{
+              filename:    'Invoice-' + inv.number + '.pdf',
+              content:     pdfBase64,
+              contentType: 'application/pdf'
+            }]
+          })
+        });
+
+        var result = await res.json();
+        var ok = res.ok && result.success;
+        if (ok) sent++;
+        else { failed++; console.warn('Reminder send failed:', inv.number, result.error); }
+
+        if (typeof logEmail === 'function') {
+          logEmail({
+            type:       overdue ? 'overdue' : 'reminder',
+            to:         inv.custEmail,
+            toName:     inv.custName || '',
+            subject:    subject,
+            body:       body,
+            invoiceId:  inv.id,
+            invoiceNum: inv.number,
+            status:     ok ? 'sent' : 'failed'
+          });
+        }
+
+      } catch (e) {
+        failed++;
+        console.error('Reminder error for', inv.number, e);
+        if (typeof logEmail === 'function') {
+          logEmail({ type: 'reminder', to: inv.custEmail || '', toName: inv.custName || '',
+            subject: 'Reminder ' + inv.number, body: '', invoiceId: inv.id,
+            invoiceNum: inv.number, status: 'failed' });
+        }
+      }
+    }
+
+    bar.style.width = '100%';
+    statusEl.textContent = 'Done: ' + sent + ' sent' + (failed ? ', ' + failed + ' failed' : '') + '.';
+    btn.disabled = false;
+    btn.textContent = 'Send Selected Reminders';
+
+    if (typeof toast === 'function') {
+      if (sent > 0)   toast('✓ ' + sent + ' reminder' + (sent !== 1 ? 's' : '') + ' sent with PDF attached', 'success');
+      if (failed > 0) toast(failed + ' reminder' + (failed !== 1 ? 's' : '') + ' failed to send', 'error');
+    }
+    if (typeof renderEmailLog === 'function') renderEmailLog();
+  };
+
+  /* ── HTML-escape helper ─────────────────────────────────────── */
+  function _esc(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
 
 }());
 </script>
