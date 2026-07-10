@@ -305,7 +305,7 @@ exports.handler = async (event) => {
           fy_start: s.settings.fyStart, bk_email: s.settings.bkEmail,
           default_refund_policy: s.settings.defaultRefundPolicy,
           default_client_obligations: s.settings.defaultClientObligations,
-          // logo_data omitted from batch — synced separately to avoid size issues
+          logo_data: s.settings.logoData,
           theme_accent: s.settings.themeAccent, theme_bg: s.settings.themeBg,
           theme_body_font: s.settings.themeBodyFont, theme_heading_font: s.settings.themeHeadingFont,
           theme_radius: s.settings.themeRadius, inv_style: s.settings.invStyle,
