@@ -4228,5 +4228,208 @@
   console.log('[portal-users] v1.0 — Control Panel users now persist to Supabase.');
 }());
 </script>
+
+<!-- == Role refresh patch (reversible restrictions) == -->
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   ROLE REFRESH PATCH  —  v1.0
+   ------------------------------------------------------------------
+   "View-only mode" stayed on screen after signing back in as the
+   super admin, and the primary buttons stayed greyed out.
+
+   Cause — applyRoleRestrictions() only ever ADDS restrictions:
+
+       if (!ROLE.canEdit) {
+         document.querySelectorAll('.btn-primary, .btn-green')
+           .forEach(b => { b.disabled = true; ... });        // no else
+       }
+       if (role === 'viewer') {
+         if (!document.getElementById('viewer-banner')) {
+           ... document.body.appendChild(banner);            // never removed
+         }
+       }
+
+   There is no branch that re-enables the buttons or removes the
+   banner. doLogout() calls showLogin() without reloading the page, so
+   the DOM survives an account switch — whatever a previous, lower
+   privileged session applied stays applied.
+
+   It can also trigger without any viewer login at all:
+
+       function getCurrentRole() {
+         return getSession()?.role || 'viewer';   // <- default
+       }
+
+   If applyRoleRestrictions() runs before the session exists, the role
+   reads as 'viewer' and the banner is created permanently.
+
+   This replaces the function with a symmetric version: every
+   restriction it applies, it can also lift. It only marks the
+   controls it disabled itself (data-role-locked), so buttons disabled
+   for other reasons — a form that is not ready, a running action —
+   are left alone.
+
+   It also clears a stale "⚠ Offline — saved locally" indicator on
+   sign-in and re-checks the session against the server, so that
+   warning reflects the current connection rather than a failure from
+   an earlier session.
+   ══════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+
+  var LOCK_TITLE = 'Read-only access — you cannot make changes';
+
+  function S() {
+    try { return typeof state !== 'undefined' ? state : null; } catch (e) { return null; }
+  }
+  function rolesTable() {
+    try { return typeof ROLES !== 'undefined' ? ROLES : null; } catch (e) { return null; }
+  }
+
+  function lockButtons() {
+    document.querySelectorAll('.btn-primary, .btn-green').forEach(function (b) {
+      if (b.id === 'send-smtp-btn' || b.classList.contains('login-btn')) return;
+      if (b.disabled && b.dataset.roleLocked !== '1') return;   // already disabled for another reason
+      b.dataset.roleLocked = '1';
+      b.disabled = true;
+      b.style.opacity = '0.4';
+      b.style.cursor = 'not-allowed';
+      b.title = LOCK_TITLE;
+    });
+  }
+
+  function unlockButtons() {
+    document.querySelectorAll('.btn-primary, .btn-green').forEach(function (b) {
+      // Only undo what the role restriction did. The title check catches
+      // buttons locked by the ORIGINAL function before this patch loaded.
+      if (b.dataset.roleLocked !== '1' && b.title !== LOCK_TITLE) return;
+      delete b.dataset.roleLocked;
+      b.disabled = false;
+      b.style.opacity = '';
+      b.style.cursor = '';
+      if (b.title === LOCK_TITLE) b.title = '';
+    });
+  }
+
+  function removeEl(id) {
+    var el = document.getElementById(id);
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+  }
+
+  window.applyRoleRestrictions = function () {
+    var session = (typeof getSession === 'function' && getSession()) || null;
+    var ROLE_MAP = rolesTable() || {};
+    // Only fall back to 'viewer' for a REAL session that has no role.
+    // With no session at all we are on the login screen — restricting
+    // anything there is what pinned the banner in the first place.
+    var role = session ? (session.role || 'viewer') : null;
+    var caps = role ? (ROLE_MAP[role] || ROLE_MAP.viewer || {}) : null;
+
+    var cp = document.getElementById('nav-controlpanel');
+    if (cp) cp.style.display = (caps && caps.canControlPanel) ? '' : 'none';
+
+    var settingsNav = document.querySelector('[data-page="settings"]');
+    var canSee = caps && (caps.canSettings || (role === 'admin' && session && session.tenantId));
+    if (settingsNav) settingsNav.style.display = canSee ? '' : 'none';
+
+    var saBtns = document.getElementById('superadmin-settings-btns');
+    if (saBtns) saBtns.style.display = role === 'superadmin' ? 'contents' : 'none';
+
+    if (!session) {           // login screen — leave the UI untouched
+      removeEl('viewer-banner');
+      unlockButtons();
+      return;
+    }
+
+    if (caps.canEdit) unlockButtons();
+    else lockButtons();
+
+    /* ── The banner: create AND remove ─────────────────────────────── */
+    if (role === 'viewer') {
+      if (!document.getElementById('viewer-banner')) {
+        var st = S() || { settings: {} };
+        var owner = (st.settings && st.settings.owner) ||
+          (st.settings && st.settings.company && st.settings.company.split('(')[0].trim()) ||
+          'the administrator';
+        var b = document.createElement('div');
+        b.id = 'viewer-banner';
+        b.style.cssText = 'position:fixed;bottom:0;left:230px;right:0;' +
+          'background:rgba(74,158,255,.12);border-top:1px solid rgba(74,158,255,.3);' +
+          'padding:8px 20px;font-size:12px;color:var(--blue);z-index:150';
+        b.innerHTML = '👁 <strong>View-only mode</strong> — You can view all data but ' +
+          'cannot make changes. Contact ' + owner + ' to request edit access.';
+        document.body.appendChild(b);
+      }
+    } else {
+      removeEl('viewer-banner');          // <- the missing branch
+    }
+
+    if (session.tenantId) {
+      if (!document.getElementById('tenant-banner')) {
+        var tb = document.createElement('div');
+        tb.id = 'tenant-banner';
+        tb.style.cssText = 'position:fixed;top:0;left:0;right:0;height:3px;' +
+          'background:linear-gradient(90deg,var(--accent),var(--accent2));z-index:200';
+        document.body.appendChild(tb);
+      }
+    } else {
+      removeEl('tenant-banner');          // <- also never removed before
+    }
+
+    refreshSyncIndicator();
+  };
+
+  /* ── "Offline — saved locally" reflects the CURRENT session ──────── */
+  function refreshSyncIndicator() {
+    if (typeof setSyncStatus !== 'function') return;
+    setSyncStatus('hidden');              // drop whatever an earlier session left
+
+    if (typeof getDbToken !== 'function' || !getDbToken() || typeof dbCall !== 'function') {
+      setSyncStatus('offline');
+      return;
+    }
+    // Verify quietly; only report offline if the server actually says no.
+    dbCall('auth.verify', { token: getDbToken() }).then(function (res) {
+      if (!res || res.error || res.valid === false) setSyncStatus('offline');
+      else {
+        setSyncStatus('hidden');
+        if (res.renewedToken) setDbToken(res.renewedToken);
+      }
+    }).catch(function () { setSyncStatus('offline'); });
+  }
+
+  window.refreshRoleUI = function () {
+    window.applyRoleRestrictions();
+    return {
+      role: (typeof getCurrentRole === 'function' ? getCurrentRole() : null),
+      bannerPresent: !!document.getElementById('viewer-banner'),
+      lockedButtons: document.querySelectorAll('[data-role-locked="1"]').length,
+    };
+  };
+
+  /* Re-apply on sign-out too, so the next sign-in starts clean */
+  var _origShowLogin = window.showLogin;
+  if (typeof _origShowLogin === 'function') {
+    window.showLogin = function () {
+      var r = _origShowLogin.apply(this, arguments);
+      removeEl('viewer-banner');
+      removeEl('tenant-banner');
+      unlockButtons();
+      return r;
+    };
+  }
+
+  // Clean up anything the original already pinned before this loaded
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () { window.applyRoleRestrictions(); });
+  } else {
+    setTimeout(function () { window.applyRoleRestrictions(); }, 0);
+  }
+
+  window.ROLE_REFRESH = { version: '1.0', refresh: window.refreshRoleUI };
+
+  console.log('[role-refresh] v1.0 — role restrictions are now reversible.');
+}());
+</script>
 </body>
 </html>
