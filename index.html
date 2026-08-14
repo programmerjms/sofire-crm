@@ -4431,5 +4431,567 @@
   console.log('[role-refresh] v1.0 — role restrictions are now reversible.');
 }());
 </script>
+
+<!-- == Invoice fields & labels patch == -->
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   INVOICE FIELDS & LABELS PATCH  —  v1.0
+   ------------------------------------------------------------------
+   Two additions to invoicing:
+
+   1. RENAME ANY LABEL
+      Every label on an invoice was hardcoded, and hardcoded three
+      times over — once in the live preview markup, once in
+      buildInvoiceHTML() (view / print / PDF / share link) and once in
+      buildEmailBody(). That is why the preview said "Date of Quote"
+      while the form said "Date", and why the quantity column said
+      "Days" regardless of what you were billing.
+
+      Labels now live in state.settings.invLabels and are applied to
+      all three renderers from one place.
+
+   2. CUSTOM FIELDS
+      Define fields once in Settings (VAT Number, Contact Person, PO
+      Number, Reg. Number...) and they appear on every new invoice.
+      Fields flagged "store on customer" are saved against the
+      customer record, so choosing them from "Select Existing
+      Customer" fills the values in automatically. One-off fields can
+      also be added to a single invoice.
+
+      Each invoice stores its own snapshot of the fields, so renaming
+      or deleting a definition later never rewrites history.
+
+   Rendering is done by parsing each renderer's output into a detached
+   DOM and editing nodes, rather than by string surgery — replacing
+   ">Amount<" in raw HTML would also hit ">Amount Due<".
+   ══════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+
+  function S() {
+    try { return typeof state !== 'undefined' ? state : null; } catch (e) { return null; }
+  }
+
+  /* ── Default labels, keyed by the text currently baked into the
+        renderers. `find` is what we search for; the value is what the
+        user sees and can change. ───────────────────────────────────── */
+  var LABEL_DEFS = [
+    { key: 'title',            find: 'INVOICE',             label: 'Document title' },
+    { key: 'billTo',           find: 'Bill To',             label: 'Customer block heading' },
+    { key: 'billedTo',         find: 'Billed To',           label: 'Customer heading (email)' },
+    { key: 'invoiceNumber',    find: 'Invoice Number',      label: 'Invoice number' },
+    { key: 'date',             find: 'Date of Quote',       label: 'Invoice date' },
+    { key: 'dateEmail',        find: 'Date',                label: 'Invoice date (email)' },
+    { key: 'dueDate',          find: 'Due Date',            label: 'Due date' },
+    { key: 'colItem',          find: 'Item',                label: 'Column 1 — description' },
+    { key: 'colPrice',         find: 'Price',               label: 'Column 2 — unit price' },
+    { key: 'colQty',           find: 'Days',                label: 'Column 3 — quantity' },
+    { key: 'colAmount',        find: 'Amount',              label: 'Column 4 — line total' },
+    { key: 'subtotal',         find: 'Subtotal',            label: 'Subtotal' },
+    { key: 'afterDiscount',    find: 'After Discount',      label: 'After discount' },
+    { key: 'total',            find: 'Total',               label: 'Total' },
+    { key: 'amountDue',        find: 'Amount Due',          label: 'Amount due' },
+    { key: 'paymentInstruction', find: 'Payment Instruction', label: 'Payment block heading' },
+    { key: 'paymentInstructions', find: 'Payment Instructions', label: 'Payment heading (email)' },
+    { key: 'refundPolicy',     find: 'No Refund Policy:',   label: 'Refund policy heading' },
+    { key: 'clientObligations', find: 'Client Obligations:', label: 'Obligations heading' },
+  ];
+
+  function labels() {
+    var st = S();
+    return (st && st.settings && st.settings.invLabels) || {};
+  }
+  function labelFor(key) {
+    var def = LABEL_DEFS.find(function (d) { return d.key === key; });
+    var over = labels()[key];
+    return (over && String(over).trim()) || (def ? def.find : '');
+  }
+  function fieldDefs() {
+    var st = S();
+    var f = st && st.settings && st.settings.invFields;
+    return Array.isArray(f) ? f : [];
+  }
+
+  /* ── Apply labels + custom fields to any invoice DOM tree ────────── */
+  function leafWithText(root, text) {
+    var all = root.querySelectorAll('div,td,th,span,strong,p');
+    for (var i = 0; i < all.length; i++) {
+      if (!all[i].querySelector('*') && all[i].textContent.trim() === text) return all[i];
+    }
+    return null;
+  }
+
+  function applyLabels(root, persistent) {
+    // Map every default to its current value, including unchanged ones,
+    // so renaming back to the default works too.
+    var map = {};
+    LABEL_DEFS.forEach(function (d) { map[d.find] = labelFor(d.key); });
+
+    // Walk TEXT NODES and match the whole trimmed value. Doing this on
+    // raw HTML would make ">Amount<" also match inside ">Amount Due<".
+    //
+    // The live preview is a persistent DOM: once "Bill To" has been
+    // rewritten to "Client Details", the default is gone and a second
+    // rename would have nothing to match. So remember the original text
+    // on the element and always key off that.
+    var doc = root.ownerDocument || document;
+    var walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
+    var n, hits = [];
+    while ((n = walker.nextNode())) {
+      var el = n.parentElement;
+      if (!el) continue;
+      var orig = el.getAttribute ? el.getAttribute('data-lbl-orig') : null;
+      var key = orig != null ? orig : n.nodeValue.trim();
+      if (map[key] === undefined) continue;
+      hits.push([n, el, key, map[key]]);
+    }
+    hits.forEach(function (h) {
+      var node = h[0], el = h[1], key = h[2], next = h[3];
+      if (persistent && el.setAttribute && !el.getAttribute('data-lbl-orig')) {
+        el.setAttribute('data-lbl-orig', key);
+      }
+      var cur = node.nodeValue.trim();
+      if (cur !== next) node.nodeValue = node.nodeValue.replace(cur, next);
+    });
+  }
+
+  function applyCustomFields(root, inv, opts) {
+    opts = opts || {};
+    var fields = (inv && inv.customFields) || [];
+    if (!fields.length) return;
+
+    var billTo = fields.filter(function (f) { return f.target !== 'meta' && f.value; });
+    var meta   = fields.filter(function (f) { return f.target === 'meta' && f.value; });
+
+    if (billTo.length) {
+      var anchor = leafWithText(root, labelFor('billTo')) || leafWithText(root, 'Bill To');
+      var cell = anchor && anchor.parentNode;
+      if (cell) {
+        billTo.forEach(function (f) {
+          var d = root.ownerDocument.createElement('div');
+          d.style.cssText = opts.previewStyle ||
+            'font-size:11px;color:#555;line-height:1.6';
+          d.setAttribute('data-cf', f.id);
+          d.innerHTML = '<strong>' + esc(f.label) + ':</strong> ' + esc(f.value);
+          cell.appendChild(d);
+        });
+      }
+    }
+
+    if (meta.length) {
+      var mAnchor = leafWithText(root, labelFor('invoiceNumber')) || leafWithText(root, 'Invoice Number');
+      var table = mAnchor && mAnchor.closest && mAnchor.closest('table');
+      var row   = mAnchor && mAnchor.closest && mAnchor.closest('tr');
+      if (table && row) {
+        var body = table.tBodies[0] || table;
+        meta.forEach(function (f) {
+          var tr = root.ownerDocument.createElement('tr');
+          tr.setAttribute('data-cf', f.id);
+          var l = row.children[0], v = row.children[1];
+          tr.innerHTML =
+            '<td style="' + (l ? l.getAttribute('style') || '' : '') + '">' + esc(f.label) + '</td>' +
+            '<td style="' + (v ? v.getAttribute('style') || '' : '') + '">' + esc(f.value) + '</td>';
+          body.appendChild(tr);
+        });
+      } else if (mAnchor) {
+        // Preview layout uses divs, not a table
+        var host = mAnchor.parentNode && mAnchor.parentNode.parentNode;
+        if (host) {
+          meta.forEach(function (f) {
+            var wrap = mAnchor.parentNode.cloneNode(true);
+            wrap.setAttribute('data-cf', f.id);
+            var kids = wrap.children;
+            if (kids.length >= 2) { kids[0].textContent = f.label; kids[1].textContent = f.value; }
+            wrap.removeAttribute('id');
+            host.appendChild(wrap);
+          });
+        }
+      }
+    }
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  /* ── Wrap the two HTML generators ────────────────────────────────── */
+  var _origBuildInvoiceHTML = window.buildInvoiceHTML;
+  if (typeof _origBuildInvoiceHTML === 'function') {
+    window.buildInvoiceHTML = function (inv, settings) {
+      var html = _origBuildInvoiceHTML.apply(this, arguments);
+      try {
+        var doc = new DOMParser().parseFromString('<div id="__r">' + html + '</div>', 'text/html');
+        var root = doc.getElementById('__r');
+        applyLabels(root);
+        applyCustomFields(root, inv);
+        return root.innerHTML;
+      } catch (e) {
+        console.warn('[invoice-fields] buildInvoiceHTML post-process failed:', e);
+        return html;
+      }
+    };
+  }
+
+  var _origBuildEmailBody = window.buildEmailBody;
+  if (typeof _origBuildEmailBody === 'function') {
+    window.buildEmailBody = function (inv, settings, msg) {
+      var html = _origBuildEmailBody.apply(this, arguments);
+      try {
+        var doc = new DOMParser().parseFromString('<div id="__r">' + html + '</div>', 'text/html');
+        var root = doc.getElementById('__r');
+        applyLabels(root);
+        applyCustomFields(root, inv);
+        return root.innerHTML;
+      } catch (e) {
+        return html;
+      }
+    };
+  }
+
+  /* ── Live preview ────────────────────────────────────────────────── */
+  var _origUpdatePreview = window.updatePreview;
+  if (typeof _origUpdatePreview === 'function') {
+    window.updatePreview = function () {
+      var r = _origUpdatePreview.apply(this, arguments);
+      try {
+        var prev = document.getElementById('invoice-preview');
+        if (prev) {
+          prev.querySelectorAll('[data-cf]').forEach(function (el) { el.remove(); });
+          applyLabels(prev, true);
+          applyCustomFields(prev, { customFields: collectCustomFieldValues() },
+                            { previewStyle: 'font-size:11px;color:#555;line-height:1.6' });
+        }
+      } catch (e) { console.warn('[invoice-fields] preview update failed:', e); }
+      return r;
+    };
+  }
+
+  /* ── Custom field inputs on the Create Invoice form ──────────────── */
+  function collectCustomFieldValues() {
+    var out = [];
+    document.querySelectorAll('#inv-custom-fields [data-cf-id]').forEach(function (input) {
+      out.push({
+        id: input.getAttribute('data-cf-id'),
+        label: input.getAttribute('data-cf-label'),
+        target: input.getAttribute('data-cf-target') || 'billTo',
+        onCustomer: input.getAttribute('data-cf-oncust') === '1',
+        value: input.value,
+      });
+    });
+    return out;
+  }
+  window.collectCustomFieldValues = collectCustomFieldValues;
+
+  function renderInvoiceCustomInputs(values) {
+    var host = document.getElementById('inv-custom-fields');
+    if (!host) return;
+    var existing = {};
+    (values || []).forEach(function (v) { existing[v.id] = v; });
+
+    var defs = fieldDefs().slice();
+    // include one-off fields that exist on this invoice but not in Settings
+    (values || []).forEach(function (v) {
+      if (!defs.some(function (d) { return d.id === v.id; })) {
+        defs.push({ id: v.id, label: v.label, target: v.target, onCustomer: false, oneOff: true });
+      }
+    });
+
+    host.innerHTML = defs.map(function (d) {
+      var val = existing[d.id] ? existing[d.id].value : '';
+      return '<div class="form-group">' +
+        '<label>' + esc(d.label) + (d.oneOff ? ' <span style="color:var(--text3)">(one-off)</span>' : '') + '</label>' +
+        '<input type="text" data-cf-id="' + esc(d.id) + '" data-cf-label="' + esc(d.label) + '" ' +
+          'data-cf-target="' + esc(d.target || 'billTo') + '" ' +
+          'data-cf-oncust="' + (d.onCustomer ? '1' : '0') + '" ' +
+          'value="' + esc(val) + '" oninput="updatePreview()">' +
+        '</div>';
+    }).join('');
+  }
+  window.renderInvoiceCustomInputs = renderInvoiceCustomInputs;
+
+  window.addOneOffField = function () {
+    var name = prompt('Field name (this invoice only):');
+    if (!name || !name.trim()) return;
+    var vals = collectCustomFieldValues();
+    vals.push({ id: 'oneoff-' + Date.now(), label: name.trim(), target: 'billTo', value: '' });
+    renderInvoiceCustomInputs(vals);
+    updatePreview();
+  };
+
+  /* ── Save / load invoice with its field snapshot ─────────────────── */
+  var _origCollect = window.collectInvoiceData;
+  if (typeof _origCollect === 'function') {
+    window.collectInvoiceData = function () {
+      var data = _origCollect.apply(this, arguments);
+      data.customFields = collectCustomFieldValues().filter(function (f) { return f.value; });
+      return data;
+    };
+  }
+
+  var _origEditInvoice = window.editInvoice;
+  if (typeof _origEditInvoice === 'function') {
+    window.editInvoice = function (id) {
+      var r = _origEditInvoice.apply(this, arguments);
+      var st = S();
+      var inv = st && st.invoices.find(function (i) { return i.id === id; });
+      setTimeout(function () {
+        renderInvoiceCustomInputs((inv && inv.customFields) || []);
+        if (typeof updatePreview === 'function') updatePreview();
+      }, 60);
+      return r;
+    };
+  }
+
+  /* ── Auto-fill from the customer record ─────────────────────────── */
+  var _origFillCustomer = window.fillCustomer;
+  if (typeof _origFillCustomer === 'function') {
+    window.fillCustomer = function () {
+      var r = _origFillCustomer.apply(this, arguments);
+      try {
+        var st = S();
+        var sel = document.getElementById('inv-customer');
+        var cust = st && sel && st.customers.find(function (c) { return c.id === sel.value; });
+        if (cust) {
+          var vals = collectCustomFieldValues().map(function (v) {
+            var stored = cust.custom && cust.custom[v.id];
+            return stored ? Object.assign({}, v, { value: stored }) : v;
+          });
+          renderInvoiceCustomInputs(vals);
+          if (typeof updatePreview === 'function') updatePreview();
+        }
+      } catch (e) {}
+      return r;
+    };
+  }
+
+  /* ── Customer modal: inputs for fields flagged "store on customer" ── */
+  function renderCustomerCustomInputs(cust) {
+    var host = document.getElementById('cust-custom-fields');
+    if (!host) return;
+    var defs = fieldDefs().filter(function (d) { return d.onCustomer; });
+    if (!defs.length) { host.innerHTML = ''; return; }
+    host.innerHTML = defs.map(function (d) {
+      var val = (cust && cust.custom && cust.custom[d.id]) || '';
+      return '<div class="form-group">' +
+        '<label>' + esc(d.label) + '</label>' +
+        '<input type="text" data-ccf-id="' + esc(d.id) + '" value="' + esc(val) + '">' +
+        '</div>';
+    }).join('');
+  }
+
+  var _origOpenCustomerModal = window.openCustomerModal;
+  if (typeof _origOpenCustomerModal === 'function') {
+    window.openCustomerModal = function (id) {
+      var r = _origOpenCustomerModal.apply(this, arguments);
+      var st = S();
+      var cust = id && st ? st.customers.find(function (c) { return c.id === id; }) : null;
+      renderCustomerCustomInputs(cust);
+      return r;
+    };
+  }
+
+  var _origSaveCustomer = window.saveCustomer;
+  if (typeof _origSaveCustomer === 'function') {
+    window.saveCustomer = function () {
+      var st = S();
+      var editingId = st && st.editingCustId;
+      var custom = {};
+      document.querySelectorAll('#cust-custom-fields [data-ccf-id]').forEach(function (i) {
+        if (i.value) custom[i.getAttribute('data-ccf-id')] = i.value;
+      });
+      var r = _origSaveCustomer.apply(this, arguments);
+      try {
+        var name = document.getElementById('c-name');
+        var target = st.customers.find(function (c) { return c.id === editingId; }) ||
+                     st.customers[st.customers.length - 1];
+        if (target && Object.keys(custom).length) {
+          target.custom = custom;
+          if (typeof save === 'function') save();
+        }
+      } catch (e) {}
+      return r;
+    };
+  }
+
+  /* ── Settings modal: edit labels and define fields ───────────────── */
+  window.openInvoiceFieldsModal = function () {
+    ensureModal();
+    var st = S(); if (!st.settings.invLabels) st.settings.invLabels = {};
+    renderLabelEditor();
+    renderFieldEditor();
+    openModal('invoice-fields-modal');
+  };
+
+  function ensureModal() {
+    if (document.getElementById('invoice-fields-modal')) return;
+    var m = document.createElement('div');
+    m.className = 'modal-overlay';
+    m.id = 'invoice-fields-modal';
+    m.innerHTML =
+      '<div class="modal" style="max-width:680px;width:95vw">' +
+        '<div class="modal-header">' +
+          '<div class="modal-title">Invoice Fields &amp; Labels</div>' +
+          '<button class="modal-close" onclick="closeModal(\'invoice-fields-modal\')">&times;</button>' +
+        '</div>' +
+        '<div class="modal-body">' +
+          '<div style="display:flex;gap:8px;margin-bottom:14px">' +
+            '<button class="btn btn-ghost btn-sm" id="ifm-tab-labels" onclick="ifmTab(\'labels\')">Labels</button>' +
+            '<button class="btn btn-ghost btn-sm" id="ifm-tab-fields" onclick="ifmTab(\'fields\')">Custom fields</button>' +
+          '</div>' +
+          '<div id="ifm-labels">' +
+            '<div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6">' +
+              'Rename anything that appears on the invoice. Blank means keep the default. ' +
+              'Applies to the preview, the PDF and the emailed copy.</div>' +
+            '<div id="ifm-label-list" class="form-grid"></div>' +
+          '</div>' +
+          '<div id="ifm-fields" style="display:none">' +
+            '<div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6">' +
+              'Fields added here appear on every new invoice. Tick <strong>Store on customer</strong> ' +
+              'to save the value against the customer so it fills in automatically next time.</div>' +
+            '<div id="ifm-field-list"></div>' +
+            '<button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="ifmAddField()">+ Add field</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="modal-footer">' +
+          '<button class="btn btn-ghost" onclick="closeModal(\'invoice-fields-modal\')">Cancel</button>' +
+          '<button class="btn btn-primary" onclick="ifmSave()">Save</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(m);
+  }
+
+  window.ifmTab = function (which) {
+    document.getElementById('ifm-labels').style.display = which === 'labels' ? '' : 'none';
+    document.getElementById('ifm-fields').style.display = which === 'fields' ? '' : 'none';
+  };
+
+  function renderLabelEditor() {
+    var host = document.getElementById('ifm-label-list');
+    var cur = labels();
+    host.innerHTML = LABEL_DEFS.map(function (d) {
+      return '<div class="form-group">' +
+        '<label>' + esc(d.label) + '</label>' +
+        '<input type="text" data-lbl="' + d.key + '" placeholder="' + esc(d.find) + '" ' +
+        'value="' + esc(cur[d.key] || '') + '">' +
+        '</div>';
+    }).join('');
+  }
+
+  function renderFieldEditor(list) {
+    var host = document.getElementById('ifm-field-list');
+    var defs = list || fieldDefs();
+    if (!defs.length) {
+      host.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:6px 0">No custom fields yet.</div>';
+      return;
+    }
+    host.innerHTML = defs.map(function (d, i) {
+      return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px" data-fi="' + i + '">' +
+        '<input type="text" data-f-label value="' + esc(d.label) + '" placeholder="Field name" style="flex:1">' +
+        '<select data-f-target style="width:150px">' +
+          '<option value="billTo"' + (d.target !== 'meta' ? ' selected' : '') + '>Customer block</option>' +
+          '<option value="meta"' + (d.target === 'meta' ? ' selected' : '') + '>Invoice details</option>' +
+        '</select>' +
+        '<label style="display:flex;align-items:center;gap:5px;font-size:11px;white-space:nowrap">' +
+          '<input type="checkbox" data-f-oncust' + (d.onCustomer ? ' checked' : '') + '> Store on customer</label>' +
+        '<button class="btn btn-ghost btn-sm" style="color:var(--accent)" onclick="ifmRemoveField(' + i + ')">&times;</button>' +
+        '</div>';
+    }).join('');
+  }
+
+  function readFieldEditor() {
+    var out = [];
+    document.querySelectorAll('#ifm-field-list [data-fi]').forEach(function (row, i) {
+      var label = row.querySelector('[data-f-label]').value.trim();
+      if (!label) return;
+      var existing = fieldDefs()[i];
+      out.push({
+        id: (existing && existing.id) || 'cf-' + Date.now() + '-' + i,
+        label: label,
+        target: row.querySelector('[data-f-target]').value,
+        onCustomer: row.querySelector('[data-f-oncust]').checked,
+      });
+    });
+    return out;
+  }
+
+  window.ifmAddField = function () {
+    var cur = readFieldEditor();
+    cur.push({ id: 'cf-' + Date.now(), label: '', target: 'billTo', onCustomer: true });
+    renderFieldEditor(cur);
+  };
+  window.ifmRemoveField = function (i) {
+    var cur = readFieldEditor();
+    cur.splice(i, 1);
+    renderFieldEditor(cur);
+  };
+
+  window.ifmSave = function () {
+    var st = S();
+    var lbl = {};
+    document.querySelectorAll('#ifm-label-list [data-lbl]').forEach(function (i) {
+      if (i.value.trim()) lbl[i.getAttribute('data-lbl')] = i.value.trim();
+    });
+    st.settings.invLabels = lbl;
+    st.settings.invFields = readFieldEditor();
+    if (typeof save === 'function') save();
+    closeModal('invoice-fields-modal');
+    renderInvoiceCustomInputs(collectCustomFieldValues());
+    if (typeof updatePreview === 'function') updatePreview();
+    if (typeof toast === 'function') toast('Invoice fields saved ✓', 'success');
+  };
+
+  /* ── Inject the hosts into the existing markup, once ─────────────── */
+  function injectHosts() {
+    // custom field inputs on the create form, after "Website / Address"
+    var addr = document.getElementById('inv-cust-addr');
+    if (addr && !document.getElementById('inv-custom-fields')) {
+      var grid = addr.closest('.form-grid') || addr.parentNode.parentNode;
+      var host = document.createElement('div');
+      host.id = 'inv-custom-fields';
+      host.style.cssText = 'display:contents';
+      grid.appendChild(host);
+
+      var bar = document.createElement('div');
+      bar.style.cssText = 'grid-column:1/-1;display:flex;gap:8px;margin-top:4px';
+      bar.innerHTML =
+        '<button type="button" class="btn btn-ghost btn-sm" onclick="addOneOffField()">+ Add one-off field</button>' +
+        '<button type="button" class="btn btn-ghost btn-sm" onclick="openInvoiceFieldsModal()">⚙ Fields &amp; labels</button>';
+      grid.appendChild(bar);
+    }
+
+    // customer modal fields, after "Website / Address"
+    var cAddr = document.getElementById('c-addr');
+    if (cAddr && !document.getElementById('cust-custom-fields')) {
+      var cGrid = cAddr.closest('.form-grid') || cAddr.parentNode.parentNode;
+      var cHost = document.createElement('div');
+      cHost.id = 'cust-custom-fields';
+      cHost.style.cssText = 'display:contents';
+      cGrid.appendChild(cHost);
+    }
+
+    renderInvoiceCustomInputs([]);
+  }
+
+  function boot() {
+    injectHosts();
+    if (typeof updatePreview === 'function') { try { updatePreview(); } catch (e) {} }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else setTimeout(boot, 0);
+
+  window.INVOICE_FIELDS = {
+    version: '1.0',
+    LABEL_DEFS: LABEL_DEFS,
+    labelFor: labelFor,
+    fieldDefs: fieldDefs,
+    collect: collectCustomFieldValues,
+    render: renderInvoiceCustomInputs,
+  };
+
+  console.log('[invoice-fields] v1.0 — labels renameable, custom fields available.');
+}());
+</script>
 </body>
 </html>
