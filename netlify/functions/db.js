@@ -1,4 +1,3 @@
-
 /**
  * Netlify Function: db.js
  * Secure database API — uses SUPABASE_SERVICE_ROLE_KEY (never exposed to browser)

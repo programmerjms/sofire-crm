@@ -3930,5 +3930,303 @@
   console.log('[import-manager] v1.0 — FY selection, month selection, batch delete.');
 }());
 </script>
+
+<!-- == Portal users patch (persist to Supabase) == -->
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   PORTAL USERS PATCH  —  v1.0
+   ------------------------------------------------------------------
+   Portal users created in the Control Panel never reached the database
+   and could never log in. Two separate faults combined:
+
+   1. saveNewUser() wrote only to localStorage:
+          function saveUsers(u) {
+            localStorage.setItem('sofire_users', JSON.stringify(u));
+          }
+      Nothing was ever sent to Supabase, so the account existed on one
+      browser and nowhere else.
+
+   2. doLogin() asks Supabase first. The `tenants` table has no such
+      username, so auth.login returns success:false — and the handler
+      for that case shows "Incorrect username or password" and RETURNS:
+
+          } else if (res.success === false) {
+            error.textContent = res.error || 'Incorrect username...';
+            return;                      // <- stops here
+          }
+          console.warn('Supabase unavailable, using local auth');
+
+      The local getUsers() fallback further down is only reachable when
+      Supabase is UNREACHABLE. Whenever the site is online — which is
+      always, in production — a locally-created user is rejected even in
+      the browser that created them.
+
+   The server side is fixed in db.js (auth.login now falls through to a
+   portal_users table, and gains users.list / users.upsert /
+   users.delete). This file is the client half:
+
+     • saveNewUser  — writes to Supabase as well as localStorage
+     • deleteUser   — removes from Supabase as well
+     • renderCPUsers— merges the cloud list in, so what you see is what
+                      actually exists
+     • uploadLocalUsersToCloud() — one-time push of accounts already
+                      sitting in localStorage, so nothing has to be
+                      recreated by hand
+
+   REQUIRES: run schema-portal-users.sql in Supabase first.
+   ══════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+
+  var _origRenderCPUsers = window.renderCPUsers;
+  var _origDeleteUser    = window.deleteUser;
+
+  /* `state` is a top-level `let` in the bundle — global lexical scope,
+     not a window property. Same for editingUserId. */
+  function editingId() {
+    try { return typeof editingUserId !== 'undefined' ? editingUserId : null; }
+    catch (e) { return null; }
+  }
+  function setEditingId(v) {
+    try { editingUserId = v; } catch (e) {}
+  }
+
+  var cloudUsers = null;      // last known server list
+  var lastError  = null;
+
+  function online() {
+    return typeof getDbToken === 'function' && !!getDbToken() && typeof dbCall === 'function';
+  }
+
+  function notify(msg, kind) {
+    if (typeof toast === 'function') { try { toast(msg, kind); return; } catch (e) {} }
+    console[kind === 'error' ? 'error' : 'log']('[portal-users] ' + msg);
+  }
+
+  /* ── Pull the authoritative list from Supabase ───────────────────── */
+  window.loadPortalUsers = async function () {
+    if (!online()) { lastError = 'offline'; return null; }
+    var res = await dbCall('users.list', {});
+    if (!res || res.error) {
+      lastError = (res && res.error) || 'unknown error';
+      console.warn('[portal-users] list failed:', lastError);
+      return null;
+    }
+    lastError = null;
+    cloudUsers = (res.users || []).map(function (u) {
+      return {
+        id: u.id, name: u.name, username: u.username, email: u.email,
+        role: u.role, status: u.status, lastLogin: u.last_login,
+        passwordHash: '',            // never leaves the server
+        _cloud: true,
+      };
+    });
+    // Mirror locally so the offline fallback stays useful
+    try {
+      var local = getUsers();
+      var byName = {};
+      cloudUsers.forEach(function (c) { byName[c.username] = 1; });
+      var merged = cloudUsers.map(function (c) {
+        var l = local.find(function (x) { return x.username === c.username; });
+        return l && l.passwordHash ? Object.assign({}, c, { passwordHash: l.passwordHash }) : c;
+      }).concat(local.filter(function (l) { return !byName[l.username]; }));
+      saveUsers(merged);
+    } catch (e) {}
+    return cloudUsers;
+  };
+
+  /* ── Save: localStorage AND Supabase ─────────────────────────────── */
+  window.saveNewUser = async function () {
+    var g = function (id) { return document.getElementById(id); };
+    var name  = g('nu-name').value.trim();
+    var uname = g('nu-username').value.trim().toLowerCase();
+    var email = g('nu-email').value.trim();
+    var role  = g('nu-role').value;
+    var pw    = g('nu-password').value;
+    var pw2   = g('nu-password2').value;
+    var errEl = g('nu-error');
+    var showErr = function (m) { errEl.textContent = m; errEl.style.display = 'block'; };
+
+    var eid = editingId();
+
+    if (!name || !uname)          return showErr('Name and username are required.');
+    if (uname === 'juan')         return showErr('"juan" is a reserved username.');
+    if (!eid && (!pw || pw.length < 8)) return showErr('Password must be at least 8 characters.');
+    if (pw && pw !== pw2)         return showErr('Passwords do not match.');
+
+    var users = getUsers();
+    if (users.find(function (u) { return u.username === uname && u.id !== eid; })) {
+      return showErr('Username already taken. Choose another.');
+    }
+
+    var hash = pw ? await sha256(pw) : null;
+    var existing = users.find(function (u) { return u.id === eid; });
+    var rec = {
+      id: eid || Date.now().toString(),
+      name: name, username: uname, email: email, role: role,
+      status: (existing && existing.status) || 'active',
+      passwordHash: hash || (existing && existing.passwordHash) || '',
+      created: eid ? (existing && existing.created) : Date.now(),
+    };
+
+    // Push to Supabase FIRST — if the server rejects it (duplicate name,
+    // missing table, read-only role) we must not pretend it worked.
+    if (online()) {
+      var btn = document.querySelector('#new-user-modal .btn-primary');
+      var label = btn ? btn.textContent : '';
+      if (btn) { btn.textContent = 'Saving...'; btn.disabled = true; }
+
+      var res = await dbCall('users.upsert', {
+        user: {
+          id: rec.id, name: rec.name, username: rec.username, email: rec.email,
+          role: rec.role, status: rec.status,
+          passwordHash: hash || undefined,     // omitted = keep existing
+        },
+      });
+
+      if (btn) { btn.textContent = label; btn.disabled = false; }
+
+      if (!res || res.error || !res.success) {
+        var m = (res && res.error) || 'Could not reach the server.';
+        if (/portal_users table not found/i.test(m)) {
+          m = 'The portal_users table is missing. Run schema-portal-users.sql in Supabase, then try again.';
+        }
+        return showErr(m);
+      }
+    } else {
+      showErr('');
+      errEl.style.display = 'none';
+      if (!confirm('You are not connected to Supabase right now.\n\n' +
+                   'This account will be saved on THIS BROWSER ONLY and will not ' +
+                   'work anywhere else until you reconnect and save it again.\n\nContinue?')) {
+        return;
+      }
+    }
+
+    var idx = users.findIndex(function (u) { return u.id === rec.id; });
+    if (idx >= 0) users[idx] = Object.assign({}, users[idx], rec);
+    else users.push(rec);
+    saveUsers(users);
+
+    closeModal('new-user-modal');
+    setEditingId(null);
+    await window.loadPortalUsers();
+    window.renderCPUsers();
+    notify(eid ? 'User updated ✓' : 'User created ✓ — they can now sign in', 'success');
+  };
+
+  /* ── Delete: both sides ──────────────────────────────────────────── */
+  window.deleteUser = async function (id) {
+    var u = getUsers().find(function (x) { return x.id === id; });
+    if (!confirm('Delete ' + ((u && u.name) || 'this user') +
+                 '? They will no longer be able to log in.')) return;
+
+    if (online()) {
+      var res = await dbCall('users.delete', { id: id });
+      if (!res || res.error) {
+        notify('Could not delete on the server: ' + ((res && res.error) || 'unknown'), 'error');
+        return;
+      }
+    }
+    saveUsers(getUsers().filter(function (x) { return x.id !== id; }));
+    await window.loadPortalUsers();
+    window.renderCPUsers();
+    notify('User deleted', 'error');
+  };
+
+  /* ── One-time upload of accounts stuck in localStorage ───────────── */
+  window.uploadLocalUsersToCloud = async function () {
+    if (!online()) { notify('Connect to Supabase first, then try again.', 'error'); return; }
+    var local = getUsers().filter(function (u) {
+      return u.username !== 'juan' && u.passwordHash;
+    });
+    if (!local.length) { notify('No local users to upload.', 'error'); return; }
+
+    var ok = 0, failed = [];
+    for (var i = 0; i < local.length; i++) {
+      var u = local[i];
+      var res = await dbCall('users.upsert', {
+        user: {
+          id: u.id, name: u.name || u.username, username: u.username,
+          email: u.email || '', role: u.role || 'viewer',
+          status: u.status || 'active', passwordHash: u.passwordHash,
+        },
+      });
+      if (res && res.success) ok++;
+      else failed.push(u.username + ' (' + ((res && res.error) || 'failed') + ')');
+    }
+    await window.loadPortalUsers();
+    window.renderCPUsers();
+    notify(failed.length
+      ? 'Uploaded ' + ok + ', failed: ' + failed.join(', ')
+      : 'Uploaded ' + ok + ' user' + (ok === 1 ? '' : 's') + ' to Supabase ✓',
+      failed.length ? 'error' : 'success');
+  };
+
+  /* ── Render: show where each account actually lives ──────────────── */
+  window.renderCPUsers = function () {
+    if (typeof _origRenderCPUsers === 'function') _origRenderCPUsers();
+
+    var tbody = document.getElementById('cp-users-tbody');
+    if (!tbody) return;
+
+    var cloudNames = {};
+    (cloudUsers || []).forEach(function (c) { cloudNames[c.username] = 1; });
+
+    // Flag local-only accounts so it is obvious why they cannot sign in
+    var localOnly = getUsers().filter(function (u) {
+      return u.username !== 'juan' && !cloudNames[u.username];
+    });
+
+    var host = document.getElementById('cp-users-cloud-note');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'cp-users-cloud-note';
+      host.style.cssText = 'margin-top:10px;font-size:12px;line-height:1.6';
+      var wrap = tbody.closest('.card') || tbody.parentNode;
+      wrap.appendChild(host);
+    }
+
+    if (!online()) {
+      host.innerHTML = '<span style="color:var(--yellow)">⚠ Not connected to Supabase — ' +
+        'new accounts will only work on this browser.</span>';
+    } else if (lastError && /portal_users table not found/i.test(lastError)) {
+      host.innerHTML = '<span style="color:var(--accent)">⚠ The <code>portal_users</code> table ' +
+        'does not exist yet. Run <code>schema-portal-users.sql</code> in Supabase, then reload.</span>';
+    } else if (localOnly.length) {
+      host.innerHTML = '<span style="color:var(--yellow)">⚠ ' + localOnly.length +
+        ' account' + (localOnly.length === 1 ? '' : 's') + ' (' +
+        localOnly.map(function (u) { return u.username; }).join(', ') +
+        ') exist only on this browser and cannot sign in elsewhere.</span> ' +
+        '<button class="btn btn-ghost btn-sm" style="margin-left:6px" ' +
+        'onclick="uploadLocalUsersToCloud()">Upload to Supabase</button>';
+    } else if (cloudUsers) {
+      host.innerHTML = '<span style="color:var(--text3)">' + cloudUsers.length +
+        ' portal user' + (cloudUsers.length === 1 ? '' : 's') + ' synced to Supabase.</span>';
+    } else {
+      host.innerHTML = '';
+    }
+  };
+
+  /* Pull the list whenever the Control Panel is shown */
+  var _origRenderControlPanel = window.renderControlPanel;
+  if (typeof _origRenderControlPanel === 'function') {
+    window.renderControlPanel = function () {
+      var r = _origRenderControlPanel.apply(this, arguments);
+      window.loadPortalUsers().then(function () { window.renderCPUsers(); });
+      return r;
+    };
+  }
+
+  window.PORTAL_USERS = {
+    version: '1.0',
+    load: function () { return window.loadPortalUsers(); },
+    cloud: function () { return cloudUsers; },
+    lastError: function () { return lastError; },
+  };
+
+  console.log('[portal-users] v1.0 — Control Panel users now persist to Supabase.');
+}());
+</script>
 </body>
 </html>
