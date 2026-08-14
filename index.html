@@ -5265,5 +5265,170 @@
   console.log('[tenant-sync] v1.0 — offline sessions are now visible.');
 }());
 </script>
+
+<!-- == Mobile navigation patch == -->
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   MOBILE NAVIGATION PATCH  —  v1.0
+   ------------------------------------------------------------------
+   On a phone the side menu covered most of the screen and could not
+   be dismissed.
+
+   Cause — the app had no responsive CSS whatsoever. The only media
+   query in the whole stylesheet was `@media print`. The sidebar is:
+
+       .sidebar { width:230px; position:fixed; left:0; top:0; bottom:0 }
+       .main    { margin-left:230px }
+
+   Both are unconditional, so on a 390px-wide phone the menu occupied
+   59% of the viewport permanently and the content was squeezed into
+   what was left.
+
+   The layout half of the fix lives in styles.css (a real breakpoint,
+   so there is no flash of the desktop layout on load). This file adds
+   the behaviour: a hamburger button, a backdrop, and the open/close
+   rules people expect from a drawer —
+
+     • tap the backdrop to close
+     • tap any menu item to close (you have navigated, the menu's job
+       is done)
+     • Escape closes
+     • swipe left on the drawer closes
+     • growing past the breakpoint closes and resets, so rotating the
+       phone or opening on desktop never leaves it stuck open
+   ══════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+
+  var BREAKPOINT = 820;
+
+  function isMobile() { return window.innerWidth <= BREAKPOINT; }
+
+  function ensureChrome() {
+    // Backdrop
+    if (!document.querySelector('.nav-backdrop')) {
+      var bd = document.createElement('div');
+      bd.className = 'nav-backdrop';
+      bd.setAttribute('aria-hidden', 'true');
+      bd.addEventListener('click', closeNav);
+      document.body.appendChild(bd);
+    }
+
+    // Hamburger, first child of the top bar
+    var topbar = document.querySelector('.topbar');
+    if (topbar && !topbar.querySelector('.nav-toggle')) {
+      var btn = document.createElement('button');
+      btn.className = 'nav-toggle';
+      btn.type = 'button';
+      btn.setAttribute('aria-label', 'Open menu');
+      btn.setAttribute('aria-expanded', 'false');
+      btn.setAttribute('aria-controls', 'app-sidebar');
+      btn.innerHTML =
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+        'stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/>' +
+        '<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>';
+      btn.addEventListener('click', function (e) { e.stopPropagation(); toggleNav(); });
+      topbar.insertBefore(btn, topbar.firstChild);
+    }
+
+    var side = document.querySelector('.sidebar');
+    if (side && !side.id) side.id = 'app-sidebar';
+  }
+
+  function openNav() {
+    if (!isMobile()) return;
+    document.body.classList.add('nav-open');
+    var b = document.querySelector('.nav-toggle');
+    if (b) { b.setAttribute('aria-expanded', 'true'); b.setAttribute('aria-label', 'Close menu'); }
+  }
+
+  function closeNav() {
+    document.body.classList.remove('nav-open');
+    var b = document.querySelector('.nav-toggle');
+    if (b) { b.setAttribute('aria-expanded', 'false'); b.setAttribute('aria-label', 'Open menu'); }
+  }
+
+  function toggleNav() {
+    if (document.body.classList.contains('nav-open')) closeNav(); else openNav();
+  }
+
+  window.openNav = openNav;
+  window.closeNav = closeNav;
+  window.toggleNav = toggleNav;
+
+  /* Navigating means the drawer has done its job */
+  var _origNav = window.nav;
+  if (typeof _origNav === 'function') {
+    window.nav = function () {
+      var r = _origNav.apply(this, arguments);
+      closeNav();
+      return r;
+    };
+  }
+  // Sidebar items that are not routed through nav() (logout, tenant switch...)
+  document.addEventListener('click', function (e) {
+    if (!document.body.classList.contains('nav-open')) return;
+    var side = document.querySelector('.sidebar');
+    if (side && side.contains(e.target) &&
+        e.target.closest('.nav-item, button, a')) {
+      setTimeout(closeNav, 80);
+    }
+  }, true);
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeNav();
+  });
+
+  /* Rotating to landscape / resizing to desktop must not leave it stuck */
+  var resizeTimer = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      if (!isMobile()) closeNav();
+    }, 120);
+  });
+
+  /* Swipe the drawer left to dismiss */
+  (function () {
+    var startX = null, startY = null;
+    document.addEventListener('touchstart', function (e) {
+      if (!document.body.classList.contains('nav-open')) return;
+      startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+    }, { passive: true });
+    document.addEventListener('touchend', function (e) {
+      if (startX === null) return;
+      var dx = e.changedTouches[0].clientX - startX;
+      var dy = Math.abs(e.changedTouches[0].clientY - startY);
+      if (dx < -45 && dy < 60) closeNav();
+      startX = startY = null;
+    }, { passive: true });
+  }());
+
+  function boot() {
+    ensureChrome();
+    closeNav();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else setTimeout(boot, 0);
+  // The top bar exists from the start, but re-check after login renders
+  var _origShowApp2 = window.showApp;
+  if (typeof _origShowApp2 === 'function') {
+    window.showApp = function () {
+      var r = _origShowApp2.apply(this, arguments);
+      setTimeout(ensureChrome, 60);
+      return r;
+    };
+  }
+
+  window.MOBILE_NAV = {
+    version: '1.0',
+    breakpoint: BREAKPOINT,
+    isMobile: isMobile,
+    isOpen: function () { return document.body.classList.contains('nav-open'); },
+  };
+
+  console.log('[mobile-nav] v1.0 — sidebar collapses below ' + BREAKPOINT + 'px.');
+}());
+</script>
 </body>
 </html>
