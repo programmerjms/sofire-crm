@@ -4993,5 +4993,277 @@
   console.log('[invoice-fields] v1.0 — labels renameable, custom fields available.');
 }());
 </script>
+
+<!-- == Tenant sync patch (offline visibility) == -->
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   TENANT SYNC PATCH  —  v1.0
+   ------------------------------------------------------------------
+   A freelancer given portal access could create invoices, customers
+   and payments all day, and none of it reached Supabase — so signing
+   in on their phone showed an empty CRM.
+
+   Nothing errored, which is why it went unnoticed. save() writes to
+   localStorage and then calls scheduleSyncToSupabase(), which lands
+   in:
+
+       async function pushToSupabase() {
+         if (!getDbToken()) return;      // <- silent
+         ...
+
+   No toast, no indicator, no console warning. The app looks like it
+   saved, because locally it did.
+
+   A session ends up without a token whenever login falls through to
+   one of the offline paths — the ADMIN_USER check, the local
+   getUsers() list, the local getTenants() list, or the
+   ?tenant=&u=&h= share link. Those paths authenticate entirely in the
+   browser and never call setDbToken(), so every later push is skipped.
+
+   How a tenant gets into that state: saveNewTenant() only writes to
+   Supabase when the OWNER has a live token —
+
+       if (getDbToken()) { await dbCall('tenants.upsert', ...) }
+
+   — so any portal created while the owner's token was expired exists
+   only in the owner's browser. The tenant then cannot authenticate
+   against Supabase, drops to the share-link path, gets no token, and
+   works permanently offline.
+
+   This patch makes all of that visible and fixable:
+
+     • a persistent banner whenever the session has no cloud token
+     • "Connect" prompts for the password, gets a token, and pushes
+       everything that accumulated locally
+     • pushToSupabase() now reports when it skips instead of returning
+       in silence
+     • the Control Panel flags tenants that exist only in this browser
+       and offers to upload them
+   ══════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+
+  function S() {
+    try { return typeof state !== 'undefined' ? state : null; } catch (e) { return null; }
+  }
+  function online() {
+    return typeof getDbToken === 'function' && !!getDbToken();
+  }
+  function loggedIn() {
+    try { return typeof isLoggedIn === 'function' ? isLoggedIn() : !!(getSession && getSession()); }
+    catch (e) { return false; }
+  }
+  function notify(m, k) {
+    if (typeof toast === 'function') { try { toast(m, k); return; } catch (e) {} }
+    console[k === 'error' ? 'error' : 'log']('[tenant-sync] ' + m);
+  }
+
+  /* ── pushToSupabase must not fail silently ──────────────────────── */
+  var _origPush = window.pushToSupabase;
+  if (typeof _origPush === 'function') {
+    window.pushToSupabase = function () {
+      if (!online()) {
+        console.warn('[tenant-sync] push skipped — no cloud session; data is local only.');
+        if (typeof setSyncStatus === 'function') setSyncStatus('offline');
+        showOfflineBanner();
+        return Promise.resolve(false);
+      }
+      hideOfflineBanner();
+      return _origPush.apply(this, arguments);
+    };
+  }
+
+  /* ── The banner ──────────────────────────────────────────────────── */
+  function showOfflineBanner() {
+    if (!loggedIn()) return;
+    if (document.getElementById('cloud-offline-banner')) return;
+    var b = document.createElement('div');
+    b.id = 'cloud-offline-banner';
+    b.style.cssText = 'position:fixed;bottom:0;left:230px;right:0;z-index:160;' +
+      'background:rgba(255,194,74,.14);border-top:1px solid rgba(255,194,74,.45);' +
+      'padding:9px 20px;font-size:12px;color:var(--yellow);display:flex;' +
+      'align-items:center;gap:12px;flex-wrap:wrap';
+    b.innerHTML =
+      '<span>⚠ <strong>Not connected to the cloud</strong> — everything you save is on ' +
+      'this device only and will not appear on your other devices.</span>' +
+      '<button class="btn btn-ghost btn-sm" onclick="connectToCloud()" ' +
+      'style="border-color:var(--yellow);color:var(--yellow)">Connect now</button>';
+    document.body.appendChild(b);
+  }
+  function hideOfflineBanner() {
+    var b = document.getElementById('cloud-offline-banner');
+    if (b && b.parentNode) b.parentNode.removeChild(b);
+  }
+  window.showOfflineBanner = showOfflineBanner;
+  window.hideOfflineBanner = hideOfflineBanner;
+
+  /* ── Connect this session to Supabase and flush what is pending ─── */
+  window.connectToCloud = async function () {
+    var sess = (typeof getSession === 'function' && getSession()) || {};
+    var username = sess.username;
+    if (!username) { notify('Sign in first.', 'error'); return false; }
+
+    var pw = window.prompt('Enter your password to connect this device to the cloud.\n\n' +
+                           'Nothing you have entered will be lost — it will be uploaded once connected.');
+    if (!pw) return false;
+
+    var hash = await sha256(pw);
+    var res = await dbCall('auth.login', { username: username, passwordHash: hash }, '');
+
+    if (!res || res.error) {
+      notify('Could not reach the server: ' + ((res && res.error) || 'unknown'), 'error');
+      return false;
+    }
+    if (!res.success || !res.token) {
+      notify(res.error === 'Invalid credentials'
+        ? 'That password did not match the one stored in the cloud. Ask your administrator to re-save your portal.'
+        : (res.error || 'Could not connect.'), 'error');
+      return false;
+    }
+
+    setDbToken(res.token);
+    hideOfflineBanner();
+    notify('Connected ✓ uploading your data...', 'success');
+
+    // Push whatever accumulated while offline
+    var pushed = await _origPush.call(window);
+    if (typeof setSyncStatus === 'function') setSyncStatus('saved');
+    var st = S();
+    var n = st ? ((st.invoices || []).length + (st.customers || []).length +
+                  (st.payments || []).length + (st.expenses || []).length) : 0;
+    notify('Uploaded — ' + n + ' records are now in the cloud ✓', 'success');
+    return true;
+  };
+
+  /* ── Check on every sign-in ─────────────────────────────────────── */
+  var _origShowApp = window.showApp;
+  if (typeof _origShowApp === 'function') {
+    window.showApp = function () {
+      var r = _origShowApp.apply(this, arguments);
+      setTimeout(function () {
+        if (!online()) showOfflineBanner(); else hideOfflineBanner();
+      }, 400);
+      return r;
+    };
+  }
+  var _origShowLogin2 = window.showLogin;
+  if (typeof _origShowLogin2 === 'function') {
+    window.showLogin = function () {
+      var r = _origShowLogin2.apply(this, arguments);
+      hideOfflineBanner();
+      return r;
+    };
+  }
+
+  /* ── Tenants that never made it to Supabase ─────────────────────── */
+  var cloudTenantIds = null;
+
+  window.scanLocalOnlyTenants = async function () {
+    if (typeof getTenants !== 'function') return [];
+    var local = getTenants();
+    if (!online()) { cloudTenantIds = null; return []; }
+    var res = await dbCall('tenants.list', {});
+    if (!res || res.error) { cloudTenantIds = null; return []; }
+    cloudTenantIds = {};
+    (res.tenants || []).forEach(function (t) { cloudTenantIds[t.id] = 1; });
+    return local.filter(function (t) { return !cloudTenantIds[t.id]; });
+  };
+
+  window.uploadLocalTenantsToCloud = async function () {
+    var missing = await window.scanLocalOnlyTenants();
+    if (!missing.length) { notify('All client portals are already in the cloud.', 'success'); return; }
+
+    var ok = 0, failed = [];
+    for (var i = 0; i < missing.length; i++) {
+      var t = missing[i];
+      if (!t.passwordHash) { failed.push(t.username + ' (no stored password)'); continue; }
+      var res = await dbCall('tenants.upsert', {
+        tenant: {
+          id: t.id, company: t.company, contact: t.contact, email: t.email,
+          phone: t.phone, username: t.username, passwordHash: t.passwordHash,
+          retainer: t.retainer || 0, status: t.status || 'active',
+          notes: t.notes || '', accountType: t.accountType || 'freelancer',
+        },
+      });
+      if (res && !res.error) ok++;
+      else failed.push(t.username + ' (' + ((res && res.error) || 'failed') + ')');
+    }
+    await renderTenantCloudNote();
+    notify(failed.length
+      ? 'Uploaded ' + ok + ', failed: ' + failed.join(', ')
+      : 'Uploaded ' + ok + ' client portal' + (ok === 1 ? '' : 's') + ' ✓ they can now sync',
+      failed.length ? 'error' : 'success');
+  };
+
+  async function renderTenantCloudNote() {
+    var grid = document.getElementById('cp-tenants-grid');
+    if (!grid) return;
+    var host = document.getElementById('cp-tenants-cloud-note');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'cp-tenants-cloud-note';
+      host.style.cssText = 'margin-top:10px;font-size:12px;line-height:1.6';
+      grid.parentNode.insertBefore(host, grid.nextSibling);
+    }
+    if (!online()) {
+      host.innerHTML = '<span style="color:var(--yellow)">⚠ Not connected — cannot check ' +
+        'which portals are in the cloud.</span>';
+      return;
+    }
+    var missing = await window.scanLocalOnlyTenants();
+    if (!missing.length) {
+      host.innerHTML = cloudTenantIds
+        ? '<span style="color:var(--text3)">All client portals are synced to Supabase.</span>' : '';
+      return;
+    }
+    host.innerHTML = '<span style="color:var(--accent)">⚠ ' + missing.length +
+      ' client portal' + (missing.length === 1 ? '' : 's') + ' (' +
+      missing.map(function (t) { return t.username; }).join(', ') +
+      ') exist only in this browser. Anyone signing in to them works offline and ' +
+      'their data never syncs.</span> ' +
+      '<button class="btn btn-ghost btn-sm" style="margin-left:6px" ' +
+      'onclick="uploadLocalTenantsToCloud()">Upload to Supabase</button>';
+  }
+  window.renderTenantCloudNote = renderTenantCloudNote;
+
+  var _origRenderCP = window.renderControlPanel;
+  if (typeof _origRenderCP === 'function') {
+    window.renderControlPanel = function () {
+      var r = _origRenderCP.apply(this, arguments);
+      renderTenantCloudNote().catch(function () {});
+      return r;
+    };
+  }
+
+  /* ── Warn at creation time instead of failing quietly ───────────── */
+  var _origSaveNewTenant = window.saveNewTenant;
+  if (typeof _origSaveNewTenant === 'function') {
+    window.saveNewTenant = async function () {
+      if (!online()) {
+        var errEl = document.getElementById('nt-error');
+        if (errEl) {
+          errEl.style.display = 'block';
+          errEl.textContent = 'You are not connected to the cloud. This portal would be ' +
+            'saved on this browser only, and the client would never be able to sync. ' +
+            'Use "Connect now" in the banner at the bottom first.';
+        }
+        return;
+      }
+      var r = await _origSaveNewTenant.apply(this, arguments);
+      renderTenantCloudNote().catch(function () {});
+      return r;
+    };
+  }
+
+  window.TENANT_SYNC = {
+    version: '1.0',
+    online: online,
+    scanLocalOnlyTenants: function () { return window.scanLocalOnlyTenants(); },
+    bannerVisible: function () { return !!document.getElementById('cloud-offline-banner'); },
+  };
+
+  console.log('[tenant-sync] v1.0 — offline sessions are now visible.');
+}());
+</script>
 </body>
 </html>
