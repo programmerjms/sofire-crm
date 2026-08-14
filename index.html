@@ -1243,7 +1243,7 @@
         </div>
         <div id="imp-month-list" style="font-size:12px;color:var(--text2);max-height:160px;overflow-y:auto;background:var(--surface2);border-radius:8px;padding:10px 12px"></div>
         <div style="margin-top:12px;background:rgba(255,60,60,.08);border:1px solid rgba(255,60,60,.2);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--text2)">
-          ! This will <strong>add</strong> the imported records to FY2024/2025. Existing records with the same import ID will be skipped (no duplicates).
+          ! <span id="imp-target-note">This will <strong>add</strong> the imported records to the selected financial year.</span> Existing records with the same import ID will be skipped (no duplicates).
         </div>
       </div>
     </div>
@@ -3284,7 +3284,9 @@
      age-based rebates. Reads settings.dateOfBirth if it exists. */
   function ageAtYearEnd(year, dob) {
     if (!dob) {
-      try { dob = (window.state && state.settings && state.settings.dateOfBirth) || null; }
+      // `state` is a top-level `let` in the main bundle, so it lives in the
+      // global lexical scope, NOT on window — reach it by bare identifier.
+      try { dob = (typeof state !== 'undefined' && state.settings && state.settings.dateOfBirth) || null; }
       catch (e) { dob = null; }
     }
     if (!dob) return null;
@@ -3431,6 +3433,501 @@
 
   console.log('[sars-tax] v1.0 — tax year ' + taxYearFor() +
               ', primary rebate R' + tableFor().rebates.primary.toLocaleString('en-ZA'));
+}());
+</script>
+
+<!-- == Import manager patch (FY + months + delete) == -->
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   IMPORT MANAGER PATCH  —  v1.0
+   ------------------------------------------------------------------
+   Three additions to the spreadsheet import, plus one bug fix.
+
+   BUG — imports always landed in the wrong year.
+     detectFY() only recognised two financial years:
+         if (text has 2025 && 2024) return "2025";
+         if (text has 2026 && 2025) return "2026";
+         return new Date().getFullYear();          // <- 2026
+     An FY2027 sheet matches neither rule, so it fell through to the
+     CALENDAR year (2026) — which is also wrong, because from 1 March
+     the calendar year and the tax year diverge. Now the year is
+     detected from any "2026/2027", "FY2027", or consecutive-year pair
+     in the sheet, and falls back to the current TAX year.
+
+   NEW — choose the financial year before importing.
+     A dropdown in the preview re-parses the sheet into whichever FY
+     you pick, so a mis-detected year is a one-click fix rather than a
+     re-import.
+
+   NEW — choose which months to import.
+     Twelve checkboxes (Mar → Feb) with All / None. Only ticked months
+     are written, so you can top up a part-year without duplicating
+     what is already captured.
+
+   NEW — delete a previous import.
+     Imported rows carry deterministic ids:
+         import-pay-fy<YEAR>-<monthIndex>
+         import-exp-fy<YEAR>-<monthIndex>-<columnIndex>
+     so every batch is identifiable after the fact. The modal now
+     lists each imported year with its record count and totals, and
+     removes the batch on request — including from Supabase, which
+     matters because sync.push only ever upserts and would otherwise
+     resurrect the rows on the next pull.
+
+   Overrides the global import functions; the original
+   parseSpreadsheetRows() is reused so the column-mapping logic and
+   category names stay exactly as they were.
+   ══════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+
+  var _origParseRows = window.parseSpreadsheetRows;
+  if (typeof _origParseRows !== 'function') {
+    console.error('[import-manager] parseSpreadsheetRows missing — patch not applied.');
+    return;
+  }
+
+  /* Our own state; the bundle's _importData is script-scoped and
+     unreachable from here, so we drive the whole flow ourselves. */
+  var IMP = { rows: null, dataRow: -1, fy: null, parsed: null, fileName: '' };
+
+  /* The bundle declares `let state = {...}` at the top level of its own
+     <script>. Top-level let/const live in the global LEXICAL scope, not
+     on window — so `window.state` is undefined here even though the bare
+     identifier resolves fine. Always go through this. */
+  function S() {
+    try { return typeof state !== 'undefined' ? state : null; } catch (e) { return null; }
+  }
+
+  var MONTHS = [
+    { name: 'March',     m: 3,  prev: true  }, { name: 'April',    m: 4,  prev: true  },
+    { name: 'May',       m: 5,  prev: true  }, { name: 'June',     m: 6,  prev: true  },
+    { name: 'July',      m: 7,  prev: true  }, { name: 'August',   m: 8,  prev: true  },
+    { name: 'September', m: 9,  prev: true  }, { name: 'October',  m: 10, prev: true  },
+    { name: 'November',  m: 11, prev: true  }, { name: 'December', m: 12, prev: true  },
+    { name: 'January',   m: 1,  prev: false }, { name: 'February', m: 2,  prev: false },
+  ];
+
+  function currentTaxYear() {
+    if (window.SA_TAX && typeof SA_TAX.currentTaxYear === 'function') return SA_TAX.currentTaxYear();
+    var d = new Date();
+    return d.getMonth() + 1 >= 3 ? d.getFullYear() + 1 : d.getFullYear();
+  }
+
+  var money = function (n) {
+    return 'R' + (n || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  /* ── FY detection, generalised ───────────────────────────────────── */
+  window.detectFY = function (workbook, rows, dataRow) {
+    var text = '';
+    try { text = JSON.stringify(rows); } catch (e) { text = ''; }
+    try {
+      if (workbook && workbook.SheetNames) text += ' ' + workbook.SheetNames.join(' ');
+    } catch (e) {}
+
+    // "2026/2027", "2026 / 27", "2026-2027"
+    var m = text.match(/(20\d{2})\s*[\/\-]\s*(20\d{2}|\d{2})\b/);
+    if (m) {
+      var a = parseInt(m[1], 10);
+      var b = m[2].length === 2 ? 2000 + parseInt(m[2], 10) : parseInt(m[2], 10);
+      if (b === a + 1) return String(b);
+    }
+    // "FY2027" / "FY 2027"
+    m = text.match(/FY\s*(20\d{2})/i);
+    if (m) return m[1];
+
+    // Any consecutive pair of years present in the sheet -> the later one
+    var years = {};
+    (text.match(/20\d{2}/g) || []).forEach(function (y) { years[parseInt(y, 10)] = true; });
+    var keys = Object.keys(years).map(Number).sort(function (x, y) { return y - x; });
+    for (var i = 0; i < keys.length; i++) {
+      if (years[keys[i] - 1]) return String(keys[i]);
+    }
+    if (keys.length === 1) return String(keys[0]);
+
+    return String(currentTaxYear());   // <- was new Date().getFullYear()
+  };
+
+  /* ── Re-parse the loaded sheet into a given FY ───────────────────── */
+  function parseInto(fy) {
+    IMP.fy = String(fy);
+    IMP.parsed = _origParseRows(IMP.rows, IMP.dataRow, IMP.fy);
+    return IMP.parsed;
+  }
+
+  function monthKeyOf(dateStr) {
+    var p = String(dateStr || '').split('-');
+    return p.length >= 2 ? p[0] + '-' + p[1] : '';
+  }
+
+  function monthKeyFor(idx, fy) {
+    var spec = MONTHS[idx];
+    var y = spec.prev ? parseInt(fy, 10) - 1 : parseInt(fy, 10);
+    return y + '-' + String(spec.m).padStart(2, '0');
+  }
+
+  function selectedMonthKeys() {
+    var keys = [];
+    for (var i = 0; i < 12; i++) {
+      var cb = document.getElementById('imp-m-' + i);
+      if (cb && cb.checked) keys.push(monthKeyFor(i, IMP.fy));
+    }
+    return keys;
+  }
+
+  /* ── Existing import batches, derived from record ids ────────────── */
+  var ID_RE = /^import-(pay|exp)-fy(\d{4})-/;
+  function scanBatches() {
+    var byYear = {};
+    function add(rec, kind) {
+      var m = ID_RE.exec(rec.id || '');
+      if (!m) return;
+      var y = m[2];
+      byYear[y] = byYear[y] || { fy: y, payCount: 0, expCount: 0, income: 0, expense: 0 };
+      if (kind === 'pay') { byYear[y].payCount++; byYear[y].income  += parseFloat(rec.amount) || 0; }
+      else                { byYear[y].expCount++; byYear[y].expense += parseFloat(rec.amount) || 0; }
+    }
+    ((S() && S().payments) || []).forEach(function (p) { add(p, 'pay'); });
+    ((S() && S().expenses) || []).forEach(function (e) { add(e, 'exp'); });
+    return Object.keys(byYear).sort().reverse().map(function (y) { return byYear[y]; });
+  }
+
+  window.renderImportBatches = function () {
+    var host = document.getElementById('imp-existing-list');
+    if (!host) return;
+    var batches = scanBatches();
+    if (!batches.length) {
+      host.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 2px">' +
+                       'No spreadsheet imports found yet.</div>';
+      return;
+    }
+    host.innerHTML = batches.map(function (b) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;' +
+        'padding:9px 10px;background:var(--surface2);border-radius:8px;margin-bottom:6px">' +
+        '<div style="min-width:0">' +
+          '<div style="font-weight:600;font-size:13px">FY' + (b.fy - 1) + '/' + b.fy + '</div>' +
+          '<div style="font-size:11px;color:var(--text3);font-family:\'DM Mono\',monospace">' +
+            b.payCount + ' income · ' + b.expCount + ' expenses · ' +
+            money(b.income) + ' in · ' + money(b.expense) + ' out' +
+          '</div>' +
+        '</div>' +
+        '<button class="btn btn-ghost btn-sm" style="color:var(--accent);flex-shrink:0" ' +
+          'onclick="deleteImportBatch(\'' + b.fy + '\')">Delete</button>' +
+      '</div>';
+    }).join('');
+  };
+
+  window.deleteImportBatch = function (fy) {
+    fy = String(fy);
+    var st = S(); if (!st) { toast('App data not ready', 'error'); return; }
+    var pays = (st.payments || []).filter(function (p) {
+      var m = ID_RE.exec(p.id || ''); return m && m[2] === fy;
+    });
+    var exps = (st.expenses || []).filter(function (e) {
+      var m = ID_RE.exec(e.id || ''); return m && m[2] === fy;
+    });
+    var total = pays.length + exps.length;
+    if (!total) { toast('Nothing to delete for FY' + fy, 'error'); return; }
+
+    if (!confirm('Delete the FY' + (fy - 1) + '/' + fy + ' spreadsheet import?\n\n' +
+                 pays.length + ' income records\n' + exps.length + ' expense records\n\n' +
+                 'Only records created by that import are removed. ' +
+                 'Anything you entered by hand is left alone.\n\nContinue?')) return;
+
+    var payIds = {}, expIds = {};
+    pays.forEach(function (p) { payIds[p.id] = 1; });
+    exps.forEach(function (e) { expIds[e.id] = 1; });
+
+    st.payments = st.payments.filter(function (p) { return !payIds[p.id]; });
+    st.expenses = st.expenses.filter(function (e) { return !expIds[e.id]; });
+    save();
+
+    /* sync.push only upserts — without an explicit delete the rows come
+       straight back on the next pull. Chunked so we don't flood. */
+    if (typeof getDbToken === 'function' && getDbToken() && typeof dbCall === 'function') {
+      var jobs = pays.map(function (p) { return { table: 'payments', id: p.id }; })
+        .concat(exps.map(function (e) { return { table: 'expenses', id: e.id }; }));
+      (function runChunk(i) {
+        if (i >= jobs.length) return;
+        Promise.all(jobs.slice(i, i + 8).map(function (j) {
+          return dbCall('sync.delete', j).catch(function (err) {
+            console.warn('[import-manager] cloud delete failed for', j.id, err);
+          });
+        })).then(function () { runChunk(i + 8); });
+      })(0);
+    }
+
+    if (typeof renderDashboard === 'function') renderDashboard();
+    if (typeof renderPayments  === 'function') renderPayments();
+    if (typeof renderExpenses  === 'function') renderExpenses();
+    window.renderImportBatches();
+    toast('Deleted ' + total + ' imported records from FY' + (fy - 1) + '/' + fy, 'success');
+  };
+
+  /* ── Inject the new controls into the modal, once ────────────────── */
+  function ensureUI() {
+    var preview = document.getElementById('import-preview');
+    if (!preview || document.getElementById('imp-fy-select')) return;
+
+    var ctrls = document.createElement('div');
+    ctrls.id = 'imp-controls';
+    ctrls.style.cssText = 'margin-bottom:14px';
+    ctrls.innerHTML =
+      '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">' +
+        '<label style="font-size:12px;color:var(--text2)">Financial year</label>' +
+        '<select id="imp-fy-select" style="padding:6px 10px;border-radius:7px;background:var(--surface2);' +
+          'color:var(--text);border:1px solid var(--border);font-size:13px"></select>' +
+        '<span id="imp-fy-note" style="font-size:11px;color:var(--text3)"></span>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
+        '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;' +
+          'font-family:\'DM Mono\',monospace">Months to import</div>' +
+        '<div style="display:flex;gap:6px">' +
+          '<button type="button" class="btn btn-ghost btn-sm" onclick="impSelectMonths(true)">All</button>' +
+          '<button type="button" class="btn btn-ghost btn-sm" onclick="impSelectMonths(false)">None</button>' +
+        '</div>' +
+      '</div>' +
+      '<div id="imp-month-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));' +
+        'gap:5px;background:var(--surface2);border-radius:8px;padding:10px"></div>';
+    preview.insertBefore(ctrls, preview.firstChild);
+
+    // "Previous imports" section, above the drop zone
+    var zone = document.getElementById('import-drop-zone');
+    if (zone && !document.getElementById('imp-existing-wrap')) {
+      var wrap = document.createElement('div');
+      wrap.id = 'imp-existing-wrap';
+      wrap.style.cssText = 'margin-bottom:16px';
+      wrap.innerHTML =
+        '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;' +
+          'font-family:\'DM Mono\',monospace;margin-bottom:8px">Previous imports</div>' +
+        '<div id="imp-existing-list"></div>';
+      zone.parentNode.insertBefore(wrap, zone);
+    }
+  }
+
+  window.impSelectMonths = function (on) {
+    for (var i = 0; i < 12; i++) {
+      var cb = document.getElementById('imp-m-' + i);
+      if (cb && !cb.disabled) cb.checked = !!on;
+    }
+    window.impRefreshTotals();
+  };
+
+  /* Recompute the preview numbers from the ticked months */
+  window.impRefreshTotals = function () {
+    if (!IMP.parsed) return;
+    var keys = {};
+    selectedMonthKeys().forEach(function (k) { keys[k] = 1; });
+
+    var pays = IMP.parsed.payments.filter(function (p) { return keys[monthKeyOf(p.date)]; });
+    var exps = IMP.parsed.expenses.filter(function (e) { return keys[monthKeyOf(e.date)]; });
+    var inc  = pays.reduce(function (a, p) { return a + p.amount; }, 0);
+    var out  = exps.reduce(function (a, e) { return a + e.amount; }, 0);
+
+    var set = function (id, v) { var el = document.getElementById(id); if (el) el.textContent = v; };
+    set('imp-inc-count', pays.length);
+    set('imp-exp-count', exps.length);
+    set('imp-inc-total', money(inc));
+    set('imp-exp-total', money(out));
+
+    var list = document.getElementById('imp-month-list');
+    if (list) {
+      list.innerHTML =
+        '<div style="font-weight:600;margin-bottom:6px;color:var(--text)">' +
+          'FY' + (IMP.fy - 1) + '/' + IMP.fy + ' — ' + pays.length + ' of ' +
+          IMP.parsed.payments.length + ' income months selected</div>' +
+        (pays.length
+          ? pays.map(function (p) {
+              return '<div style="display:flex;justify-content:space-between;padding:2px 0;' +
+                'border-bottom:1px solid var(--border)"><span>' + p.date +
+                '</span><span style="font-family:\'DM Mono\',monospace;color:var(--green)">' +
+                money(p.amount) + '</span></div>';
+            }).join('')
+          : '<div style="color:var(--text3)">No months selected.</div>');
+    }
+
+    var btn = document.getElementById('import-confirm-btn');
+    if (btn) btn.disabled = (pays.length + exps.length) === 0;
+
+    // The modal's warning line used to hardcode "FY2024/2025"
+    var note = document.getElementById('imp-target-note');
+    if (note) {
+      note.innerHTML = 'This will <strong>add</strong> ' + pays.length + ' income and ' +
+        exps.length + ' expense records to <strong>FY' + (IMP.fy - 1) + '/' + IMP.fy + '</strong>.';
+    }
+  };
+
+  function renderMonthGrid() {
+    var grid = document.getElementById('imp-month-grid');
+    if (!grid || !IMP.parsed) return;
+
+    var present = {};
+    IMP.parsed.payments.forEach(function (p) { present[monthKeyOf(p.date)] = 1; });
+    IMP.parsed.expenses.forEach(function (e) { present[monthKeyOf(e.date)] = 1; });
+
+    grid.innerHTML = MONTHS.map(function (spec, i) {
+      var key  = monthKeyFor(i, IMP.fy);
+      var has  = !!present[key];
+      var year = key.split('-')[0];
+      return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;' +
+        'opacity:' + (has ? '1' : '.4') + ';cursor:' + (has ? 'pointer' : 'not-allowed') + '">' +
+        '<input type="checkbox" id="imp-m-' + i + '"' + (has ? ' checked' : ' disabled') +
+          ' onchange="impRefreshTotals()">' +
+        '<span>' + spec.name.slice(0, 3) + ' <span style="color:var(--text3)">' + year + '</span></span>' +
+        '</label>';
+    }).join('');
+  }
+
+  function renderFYSelect(detected) {
+    var sel = document.getElementById('imp-fy-select');
+    if (!sel) return;
+    var cur = currentTaxYear();
+    var years = [];
+    for (var y = cur + 1; y >= cur - 6; y--) years.push(y);
+    if (years.indexOf(parseInt(detected, 10)) === -1) years.push(parseInt(detected, 10));
+    years.sort(function (a, b) { return b - a; });
+
+    sel.innerHTML = years.map(function (y) {
+      return '<option value="' + y + '"' + (String(y) === String(detected) ? ' selected' : '') + '>' +
+        'FY' + (y - 1) + '/' + y + ' (Mar ' + (y - 1) + ' – Feb ' + y + ')' +
+        (y === cur ? ' — current' : '') + '</option>';
+    }).join('');
+
+    var note = document.getElementById('imp-fy-note');
+    if (note) {
+      note.textContent = String(detected) === String(cur)
+        ? 'detected from the sheet'
+        : 'detected FY' + detected + ' — change if that is wrong';
+    }
+
+    sel.onchange = function () {
+      parseInto(sel.value);
+      renderMonthGrid();
+      window.impRefreshTotals();
+      var n = document.getElementById('imp-fy-note');
+      if (n) n.textContent = 'importing into FY' + (sel.value - 1) + '/' + sel.value;
+    };
+  }
+
+  /* ── Replacement file handler ────────────────────────────────────── */
+  window.processImportFile = async function (file) {
+    if (!file.name.endsWith('.xlsx')) { toast('Please upload an .xlsx Excel file', 'error'); return; }
+    var zone = document.getElementById('import-drop-zone');
+    if (zone) zone.innerHTML = '<div style="font-size:28px">⏳</div>' +
+      '<div style="font-size:13px;margin-top:6px">Reading spreadsheet...</div>';
+
+    try {
+      if (!window.XLSX) {
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+      }
+      var buf = await file.arrayBuffer();
+      var wb  = XLSX.read(buf, { type: 'array' });
+      var sh  = wb.Sheets.Summary || wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(sh, { header: 1, defval: null });
+
+      // Same header sniffing as the original
+      var dataRow = -1;
+      var MONTH_WORDS = ['march','april','may','june','july','august','sept','october',
+                         'november','december','january','february','jan','feb','oct','nov','dec'];
+      for (var i = 0; i < Math.min(rows.length, 15); i++) {
+        var joined = rows[i].map(function (c) { return String(c || '').toLowerCase(); }).join(' ');
+        if (MONTH_WORDS.some(function (w) { return joined.indexOf(w) !== -1; }) &&
+            rows[i].some(function (c) { return typeof c === 'number' && c > 10000; })) {
+          dataRow = i; break;
+        }
+        if (joined.indexOf('income') !== -1 && joined.indexOf('bank') !== -1) dataRow = i + 1;
+      }
+      if (dataRow < 0) {
+        toast('Could not find monthly data in this spreadsheet. Make sure it has a Summary sheet with monthly rows.', 'error');
+        resetImportZone(); return;
+      }
+
+      IMP.rows = rows; IMP.dataRow = dataRow; IMP.fileName = file.name;
+      var fy = window.detectFY(wb, rows, dataRow);
+      parseInto(fy);
+
+      ensureUI();
+      renderFYSelect(fy);
+      renderMonthGrid();
+
+      document.getElementById('import-drop-zone').style.display = 'none';
+      var wrap = document.getElementById('imp-existing-wrap');
+      if (wrap) wrap.style.display = 'none';
+      document.getElementById('import-preview').style.display = '';
+      document.getElementById('import-confirm-btn').style.display = '';
+      window.impRefreshTotals();
+    } catch (e) {
+      toast('Could not read spreadsheet: ' + e.message, 'error');
+      console.error('Import error:', e);
+      resetImportZone();
+    }
+  };
+
+  /* ── Replacement confirm: only the ticked months ─────────────────── */
+  window.confirmImport = function () {
+    if (!IMP.parsed) return;
+    var keys = {};
+    selectedMonthKeys().forEach(function (k) { keys[k] = 1; });
+
+    var pays = IMP.parsed.payments.filter(function (p) { return keys[monthKeyOf(p.date)]; });
+    var exps = IMP.parsed.expenses.filter(function (e) { return keys[monthKeyOf(e.date)]; });
+    if (!pays.length && !exps.length) { toast('Select at least one month to import', 'error'); return; }
+
+    var st = S(); if (!st) { toast('App data not ready', 'error'); return; }
+    var havePay = {}, haveExp = {};
+    (st.payments || []).forEach(function (p) { havePay[p.id] = 1; });
+    (st.expenses || []).forEach(function (e) { haveExp[e.id] = 1; });
+
+    var newPays = pays.filter(function (p) { return !havePay[p.id]; });
+    var newExps = exps.filter(function (e) { return !haveExp[e.id]; });
+    var skipped = (pays.length - newPays.length) + (exps.length - newExps.length);
+
+    st.payments = (st.payments || []).concat(newPays);
+    st.expenses = (st.expenses || []).concat(newExps);
+    save();
+
+    closeModal('import-modal');
+    var preview = document.getElementById('import-preview');
+    if (preview) preview.style.display = 'none';
+    var btn = document.getElementById('import-confirm-btn');
+    if (btn) { btn.style.display = 'none'; btn.disabled = false; }
+    var wrap = document.getElementById('imp-existing-wrap');
+    if (wrap) wrap.style.display = '';
+    resetImportZone();
+
+    var label = 'FY' + (IMP.fy - 1) + '/' + IMP.fy;
+    IMP.parsed = null; IMP.rows = null;
+
+    if (typeof renderDashboard === 'function') renderDashboard();
+    window.renderImportBatches();
+    toast('✓ Imported ' + newPays.length + ' income + ' + newExps.length +
+          ' expenses into ' + label + (skipped ? ' (' + skipped + ' already present)' : ''), 'success');
+    nav('payments');
+  };
+
+  /* Refresh the batch list whenever the modal is opened */
+  var _origOpenModal = window.openModal;
+  window.openModal = function (id) {
+    var r = _origOpenModal.apply(this, arguments);
+    if (id === 'import-modal') {
+      ensureUI();
+      var wrap = document.getElementById('imp-existing-wrap');
+      if (wrap) wrap.style.display = '';
+      window.renderImportBatches();
+    }
+    return r;
+  };
+
+  window.IMPORT_MANAGER = {
+    version: '1.0',
+    scanBatches: scanBatches,
+    monthKeyFor: monthKeyFor,
+    currentTaxYear: currentTaxYear,
+    _state: IMP,
+  };
+
+  console.log('[import-manager] v1.0 — FY selection, month selection, batch delete.');
 }());
 </script>
 </body>
