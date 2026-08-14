@@ -1,3 +1,4 @@
+
 /**
  * Netlify Function: db.js
  * Secure database API — uses SUPABASE_SERVICE_ROLE_KEY (never exposed to browser)
@@ -18,24 +19,37 @@
  *   tenants.upsert  — create or update a tenant
  *   tenants.delete  — delete a tenant and all their data
  */
-
+ 
 const { createClient } = require('@supabase/supabase-js');
 const crypto = require('crypto');
-
+ 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://gpslxejjpgchmrzriskv.supabase.co';
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
+ 
+// ── Session signing secret.
+// Previously this was SERVICE_KEY itself, which meant rotating the Supabase
+// service role key silently invalidated every session token ever issued —
+// with no way for the client to tell that apart from normal expiry.
+// Set SESSION_SECRET in Netlify env to decouple the two. Falls back to
+// SERVICE_KEY so existing deployments keep working unchanged.
+const SESSION_SECRET = process.env.SESSION_SECRET || SERVICE_KEY;
+ 
+// Token lifetime. Was a hard 30 days with no renewal path.
+const TOKEN_TTL_MS     = Number(process.env.SESSION_TTL_DAYS || 90) * 24 * 3600 * 1000;
+// Tokens older than this are still valid but should be proactively renewed.
+const TOKEN_RENEW_MS   = TOKEN_TTL_MS / 3;
+ 
 function getClient() {
   if (!SERVICE_KEY) throw new Error('SUPABASE_SERVICE_ROLE_KEY not set in Netlify environment variables.');
   return createClient(SUPABASE_URL, SERVICE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false }
   });
 }
-
+ 
 function sha256(str) {
   return crypto.createHash('sha256').update(str).digest('hex');
 }
-
+ 
 function cors(body, status = 200) {
   return {
     statusCode: status,
@@ -48,36 +62,57 @@ function cors(body, status = 200) {
     body: JSON.stringify(body),
   };
 }
-
+ 
 function err(msg, status = 400) {
   return cors({ error: msg }, status);
 }
-
+ 
 // ── Simple signed session token (HMAC-SHA256)
 function makeSessionToken(tenantId, username, role) {
   const payload = JSON.stringify({ tenantId, username, role, ts: Date.now() });
   const b64 = Buffer.from(payload).toString('base64url');
-  const sig  = crypto.createHmac('sha256', SERVICE_KEY).update(b64).digest('base64url');
+  const sig  = crypto.createHmac('sha256', SESSION_SECRET).update(b64).digest('base64url');
   return `${b64}.${sig}`;
 }
-
-function verifySessionToken(token) {
+ 
+// Returns { payload } on success, or { reason } on failure.
+// `reason` is one of: 'malformed' | 'bad_signature' | 'expired'
+// The caller turns this into a distinguishable client error so the app can
+// tell "sign in again" apart from "something is misconfigured server-side".
+function inspectSessionToken(token) {
+  if (!token || typeof token !== 'string') return { reason: 'malformed' };
   try {
     const [b64, sig] = token.split('.');
-    const expected   = crypto.createHmac('sha256', SERVICE_KEY).update(b64).digest('base64url');
-    if (sig !== expected) return null;
+    if (!b64 || !sig) return { reason: 'malformed' };
+ 
+    const expected = crypto.createHmac('sha256', SESSION_SECRET).update(b64).digest('base64url');
+    // Constant-time compare — the previous `!==` leaked timing information.
+    const a = Buffer.from(sig);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      return { reason: 'bad_signature' };
+    }
+ 
     const payload = JSON.parse(Buffer.from(b64, 'base64url').toString());
-    // Expire after 30 days
-    if (Date.now() - payload.ts > 30 * 24 * 3600 * 1000) return null;
-    return payload;
-  } catch { return null; }
+    const age = Date.now() - payload.ts;
+    if (age > TOKEN_TTL_MS) return { reason: 'expired' };
+ 
+    return { payload, age, shouldRenew: age > TOKEN_RENEW_MS };
+  } catch {
+    return { reason: 'malformed' };
+  }
 }
-
+ 
+// Back-compat shim — existing call sites keep working.
+function verifySessionToken(token) {
+  return inspectSessionToken(token).payload || null;
+}
+ 
 // ── Convert flat DB rows to the nested state format the frontend expects
 function rowsToState(rows) {
   return rows;
 }
-
+ 
 // Simple in-memory rate limiter (resets on cold start — good enough for serverless)
 const _loginAttempts = new Map();
 function checkRateLimit(ip) {
@@ -91,31 +126,31 @@ function checkRateLimit(ip) {
   _loginAttempts.set(key, rec);
   return true;
 }
-
+ 
 function getClientIP(event) {
   return event.headers['x-forwarded-for']?.split(',')[0]?.trim()
     || event.headers['x-real-ip']
     || 'unknown';
 }
-
+ 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return cors({}, 200);
   if (event.httpMethod !== 'POST') return err('Method not allowed', 405);
-
+ 
   // Rate limit auth endpoints
   const clientIP = getClientIP(event);
-
+ 
   let body;
   try { body = JSON.parse(event.body); }
   catch { return err('Invalid JSON'); }
-
+ 
   const { action, payload } = body;
   if (!action) return err('Missing action');
-
+ 
   let db;
   try { db = getClient(); }
   catch (e) { return err(e.message, 500); }
-
+ 
   // ============================================================
   // AUTH.LOGIN — verify username + password, return session token
   // ============================================================
@@ -127,25 +162,25 @@ exports.handler = async (event) => {
       console.warn('[security] Rate limit exceeded for IP:', clientIP, 'user:', username);
       return err('Too many login attempts. Please wait 15 minutes.', 429);
     }
-
+ 
     const { data: tenant, error } = await db
       .from('tenants')
       .select('*')
       .eq('username', username.toLowerCase().trim())
       .eq('password_hash', passwordHash)
       .maybeSingle();
-
+ 
     if (error) return err('Database error: ' + error.message, 500);
     if (!tenant) return cors({ success: false, error: 'Invalid credentials' });
     if (tenant.status === 'suspended') return cors({ success: false, error: 'Portal suspended. Contact Sofire-IT Support.' });
-
+ 
     // Fetch this tenant's settings too
     const { data: settings } = await db
       .from('settings')
       .select('*')
       .eq('tenant_id', tenant.id)
       .maybeSingle();
-
+ 
     const token = makeSessionToken(tenant.id, tenant.username, tenant.role);
     return cors({
       success: true,
@@ -162,31 +197,51 @@ exports.handler = async (event) => {
       settings: settings || null,
     });
   }
-
+ 
   // ============================================================
   // AUTH.VERIFY — check if a session token is still valid
   // ============================================================
   if (action === 'auth.verify') {
     const { token } = payload || {};
-    if (!token) return cors({ valid: false });
-    const session = verifySessionToken(token);
-    if (!session) return cors({ valid: false });
-
+    if (!token) return cors({ valid: false, reason: 'missing' });
+    const check = inspectSessionToken(token);
+    if (!check.payload) return cors({ valid: false, reason: check.reason });
+    const session = check.payload;
+ 
     // Check tenant still exists and isn't suspended
     const { data: tenant } = await db.from('tenants').select('id,role,status,company,email').eq('id', session.tenantId).maybeSingle();
-    if (!tenant || tenant.status === 'suspended') return cors({ valid: false });
-
-    return cors({ valid: true, session: { ...session, company: tenant.company, email: tenant.email } });
+    if (!tenant || tenant.status === 'suspended') return cors({ valid: false, reason: 'suspended' });
+ 
+    return cors({
+      valid: true,
+      session: { ...session, company: tenant.company, email: tenant.email },
+      // Hand back a fresh token when the current one is past a third of its
+      // life, so an active user never walks into a hard expiry.
+      renewedToken: check.shouldRenew
+        ? makeSessionToken(session.tenantId, session.username, session.role)
+        : undefined,
+    });
   }
-
+ 
   // ── All remaining actions require a valid session token
   const token = (event.headers['x-session-token'] || body.token || '');
-  const session = verifySessionToken(token);
-  if (!session) return err('Unauthorized — invalid or expired session', 401);
-
+  const check = inspectSessionToken(token);
+  if (!check.payload) {
+    // Keep the original message (the client matches on it) but attach a
+    // machine-readable reason so the app can distinguish "your session
+    // expired, sign in again" from "the server secret changed".
+    console.warn('[auth] rejected token —', check.reason);
+    return cors({
+      error: 'Unauthorized — invalid or expired session',
+      reason: check.reason,          // 'malformed' | 'bad_signature' | 'expired'
+      canRetryWithLogin: true,
+    }, 401);
+  }
+  const session = check.payload;
+ 
   const tenantId = session.tenantId;
   const role     = session.role;
-
+ 
   // ============================================================
   // SYNC.PULL — load all tenant data from Supabase
   // ============================================================
@@ -213,7 +268,7 @@ exports.handler = async (event) => {
         db.from('employees')    .select('*').eq('tenant_id', tenantId).order('name'),
         db.from('pay_runs')     .select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false }),
       ]);
-
+ 
       // Map DB column names back to frontend camelCase
       const mapInvoice = r => ({
         id: r.id, number: r.number, date: r.date, due: r.due, status: r.status,
@@ -224,31 +279,31 @@ exports.handler = async (event) => {
         refundPolicy: r.refund_policy, clientObligations: r.client_obligations,
         lastEmailSent: r.last_email_sent,
       });
-
+ 
       const mapPayment = r => ({
         id: r.id, type: r.type, invoiceId: r.invoice_id, invoiceNumber: r.invoice_number,
         customer: r.customer, employer: r.employer, salaryType: r.salary_type,
         paye: r.paye, uif: r.uif, amount: r.amount, date: r.date, method: r.method,
         ref: r.ref, notes: r.notes, proofName: r.proof_name, proofData: r.proof_data,
       });
-
+ 
       const mapExpense = r => ({
         id: r.id, date: r.date, amount: r.amount, category: r.category,
         method: r.method, desc: r.description, notes: r.notes,
         receiptName: r.receipt_name, receiptData: r.receipt_data,
       });
-
+ 
       const mapTaxPayment = r => ({
         id: r.id, fy: r.fy, amount: r.amount, date: r.date,
         type: r.type, ref: r.ref, notes: r.notes,
       });
-
+ 
       const mapEmailLog = r => ({
         id: r.id, ts: r.ts, type: r.type, to: r.to_email, toName: r.to_name,
         subject: r.subject, body: r.body, cc: r.cc, bcc: r.bcc,
         invoiceId: r.invoice_id, invoiceNum: r.invoice_num, status: r.status, note: r.note,
       });
-
+ 
       const mapSettings = s => s ? {
         company: s.company, tagline: s.tagline, owner: s.owner, phone: s.phone,
         email: s.email, website: s.website, address: s.address,
@@ -262,7 +317,7 @@ exports.handler = async (event) => {
         nextInvNum: s.next_inv_num || 202600001,
         accountType: s.account_type || 'freelancer',
       } : {};
-
+ 
       return cors({
         success: true,
         state: {
@@ -282,17 +337,17 @@ exports.handler = async (event) => {
       return err('Pull failed: ' + e.message, 500);
     }
   }
-
+ 
   // ============================================================
   // SYNC.PUSH — save entire state to Supabase (upsert all records)
   // ============================================================
   if (action === 'sync.push') {
     const { state: s } = payload || {};
     if (!s) return err('Missing state');
-
+ 
     try {
       const ops = [];
-
+ 
       // Settings
       if (s.settings) {
         ops.push(db.from('settings').upsert({
@@ -315,7 +370,7 @@ exports.handler = async (event) => {
           updated_at: new Date().toISOString(),
         }, { onConflict: 'tenant_id' }));
       }
-
+ 
       // Invoices
       if (s.invoices?.length) {
         ops.push(db.from('invoices').upsert(s.invoices.map(i => ({
@@ -329,7 +384,7 @@ exports.handler = async (event) => {
           last_email_sent: i.lastEmailSent, updated_at: new Date().toISOString(),
         })), { onConflict: 'id' }));
       }
-
+ 
       // Customers (include documents as JSONB)
       if (s.customers?.length) {
         ops.push(db.from('customers').upsert(s.customers.map(c => ({
@@ -338,7 +393,7 @@ exports.handler = async (event) => {
           documents: (c.documents || []).map(d => ({ ...d, data: undefined })), // strip base64 binary
         })), { onConflict: 'id' }));
       }
-
+ 
       // Employees
       if (s.employees?.length) {
         ops.push(db.from('employees').upsert(s.employees.map(e => ({
@@ -356,7 +411,7 @@ exports.handler = async (event) => {
           documents: (e.documents || []).map(d => ({ ...d, data: undefined })), // strip base64 binary
         })), { onConflict: 'id' }));
       }
-
+ 
       // Pay Runs
       if (s.payRuns?.length) {
         ops.push(db.from('pay_runs').upsert(s.payRuns.map(r => ({
@@ -365,7 +420,7 @@ exports.handler = async (event) => {
           payslips: r.payslips || [],
         })), { onConflict: 'id' }));
       }
-
+ 
       // Payments
       if (s.payments?.length) {
         ops.push(db.from('payments').upsert(s.payments.map(p => ({
@@ -378,7 +433,7 @@ exports.handler = async (event) => {
           // proof_data omitted intentionally
         })), { onConflict: 'id' }));
       }
-
+ 
       // Expenses
       if (s.expenses?.length) {
         ops.push(db.from('expenses').upsert(s.expenses.map(e => ({
@@ -389,7 +444,7 @@ exports.handler = async (event) => {
           // receipt_data omitted intentionally
         })), { onConflict: 'id' }));
       }
-
+ 
       // Tax payments
       if (s.taxPayments?.length) {
         ops.push(db.from('tax_payments').upsert(s.taxPayments.map(t => ({
@@ -397,7 +452,7 @@ exports.handler = async (event) => {
           date: t.date, type: t.type, ref: t.ref, notes: t.notes,
         })), { onConflict: 'id' }));
       }
-
+ 
       // Email log
       if (s.emailLog?.length) {
         ops.push(db.from('email_log').upsert(s.emailLog.map(e => ({
@@ -407,7 +462,7 @@ exports.handler = async (event) => {
           status: e.status, note: e.note,
         })), { onConflict: 'id' }));
       }
-
+ 
       // Run all upserts in parallel
       const results = await Promise.all(ops);
       const errors  = results.filter(r => r.error).map(r => r.error.message);
@@ -415,7 +470,7 @@ exports.handler = async (event) => {
         console.error('[sync.push] Errors:', errors);
         return err('Partial save error: ' + errors.join('; '), 500);
       }
-
+ 
       return cors({ success: true, pushed: {
         invoices: s.invoices?.length || 0, customers: s.customers?.length || 0,
         payments: s.payments?.length || 0, expenses: s.expenses?.length || 0,
@@ -424,7 +479,7 @@ exports.handler = async (event) => {
       return err('Push failed: ' + e.message, 500);
     }
   }
-
+ 
   // ============================================================
   // SYNC.DELETE — delete a single record by table + id
   // ============================================================
@@ -433,13 +488,13 @@ exports.handler = async (event) => {
     const ALLOWED = ['invoices','customers','payments','expenses','tax_payments','email_log','employees','pay_runs'];
     if (!ALLOWED.includes(table)) return err('Invalid table');
     if (!id) return err('Missing id');
-
+ 
     const { error } = await db.from(table).delete().eq('id', id).eq('tenant_id', tenantId);
     if (error) return err('Delete failed: ' + error.message, 500);
     console.log('[sync.delete]', table, id, 'for tenant', tenantId);
     return cors({ success: true });
   }
-
+ 
   // ============================================================
   // SYNC.RECONCILE — delete records in Supabase that are no longer in local state
   // Call this after migration to clean up orphaned records
@@ -475,7 +530,7 @@ exports.handler = async (event) => {
       return err('Reconcile failed: ' + e.message, 500);
     }
   }
-
+ 
   // ============================================================
   // TENANTS.LIST — list all tenants (superadmin only)
   // ============================================================
@@ -485,7 +540,7 @@ exports.handler = async (event) => {
     if (error) return err(error.message, 500);
     return cors({ success: true, tenants: data });
   }
-
+ 
   // ============================================================
   // TENANTS.UPSERT — create or update a tenant (superadmin only)
   // ============================================================
@@ -493,13 +548,13 @@ exports.handler = async (event) => {
     if (role !== 'superadmin') return err('Forbidden', 403);
     const t = payload?.tenant;
     if (!t) return err('Missing tenant data');
-
+ 
     // Hash password if provided in plain text
     if (t.plainPassword) {
       t.password_hash = sha256(t.plainPassword);
       delete t.plainPassword;
     }
-
+ 
     const { error } = await db.from('tenants').upsert({
       id: t.id, company: t.company, contact: t.contact, email: t.email, phone: t.phone,
       username: t.username, password_hash: t.password_hash || t.passwordHash,
@@ -508,15 +563,15 @@ exports.handler = async (event) => {
       account_type: t.account_type || t.accountType || 'freelancer',
     }, { onConflict: 'id' });
     if (error) return err('Tenant save failed: ' + error.message, 500);
-
+ 
     // Create default settings row for new tenants
     await db.from('settings').upsert({
       tenant_id: t.id, company: t.company, owner: t.contact, email: t.email, fy_start: 3, next_inv_num: 202600001,
     }, { onConflict: 'tenant_id', ignoreDuplicates: true });
-
+ 
     return cors({ success: true });
   }
-
+ 
   // ============================================================
   // TENANTS.DELETE — delete tenant + cascade all their data
   // ============================================================
@@ -524,27 +579,27 @@ exports.handler = async (event) => {
     if (role !== 'superadmin') return err('Forbidden', 403);
     const { id } = payload || {};
     if (!id || id === 'admin') return err('Cannot delete admin tenant');
-
+ 
     const { error } = await db.from('tenants').delete().eq('id', id);
     if (error) return err('Delete failed: ' + error.message, 500);
     return cors({ success: true });
   }
-
+ 
   // ============================================================
   // AUTH.CHANGE_PASSWORD
   // ============================================================
   if (action === 'auth.change_password') {
     const { currentHash, newHash } = payload || {};
     if (!currentHash || !newHash) return err('Missing password data');
-
+ 
     // Verify current password
     const { data: tenant } = await db.from('tenants').select('password_hash').eq('id', tenantId).maybeSingle();
     if (!tenant || tenant.password_hash !== currentHash) return cors({ success: false, error: 'Current password is incorrect' });
-
+ 
     const { error } = await db.from('tenants').update({ password_hash: newHash }).eq('id', tenantId);
     if (error) return err('Password update failed: ' + error.message, 500);
     return cors({ success: true });
   }
-
+ 
   return err('Unknown action: ' + action);
 };
