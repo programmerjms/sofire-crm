@@ -4,7 +4,7 @@
   --text:#f0f0f5;--text2:#9090a8;--text3:#5a5a72;
   --green:#2dda8c;--yellow:#ffc24a;--blue:#4a9eff;--purple:#a78bfa;
   --radius:10px;--shadow:0 4px 24px rgba(0,0,0,0.4);
-  /* Theme customizer overrides â€” set by applyTheme() */
+  /* Theme customizer overrides — set by applyTheme() */
   --theme-accent:var(--accent);
   --theme-font:'DM Sans',sans-serif;
   --theme-heading-font:'Syne',sans-serif;
@@ -21,7 +21,7 @@
 .inv-style-opt svg{display:block;margin:0 auto 6px}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
-/* Auth splash â€” covers everything until session check completes */
+/* Auth splash — covers everything until session check completes */
 #auth-splash{position:fixed;inset:0;background:var(--bg);z-index:99998;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;transition:opacity .35s ease}
 #auth-splash.hidden{opacity:0;pointer-events:none}
 #auth-splash .splash-logo{width:72px;height:72px;border-radius:18px;overflow:hidden;background:var(--surface3)}
@@ -134,7 +134,7 @@ textarea{resize:vertical;min-height:70px}
 .line-item input{padding:7px 9px;font-size:12px}
 .remove-item{background:none;border:none;color:var(--text3);cursor:pointer;font-size:17px;padding:3px;transition:color .15s}
 .remove-item:hover{color:var(--accent)}
-/* PREVIEW â€” exact PDF/Bookipi match */
+/* PREVIEW — exact PDF/Bookipi match */
 .invoice-preview{background:#fff;border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#1a1a1a;height:fit-content;position:sticky;top:90px;font-size:12px}
 .preview-inner{padding:32px 36px 28px}
 .preview-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px}
